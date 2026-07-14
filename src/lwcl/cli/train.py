@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 from lwcl.cli.common import build_loaders
-from lwcl.config import load_config, save_resolved_config
+from lwcl.config import config_hash, load_config, save_resolved_config
 from lwcl.models.lwcl import LWCLModel
 from lwcl.training.trainer import Trainer, seed_everything
 
@@ -41,6 +41,7 @@ def main() -> None:
         config["training"]["max_steps"] = args.max_steps
     if args.debug_fail_after_step is not None:
         config["training"]["debug_fail_after_step"] = args.debug_fail_after_step
+    config["_config_hash"] = config_hash(config)
     seed_everything(int(config["training"].get("seed", 2025)))
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

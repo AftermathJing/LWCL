@@ -2,21 +2,23 @@
 set -euo pipefail
 
 test -f pyproject.toml
+CONDA_BIN="${CONDA_BIN:-$HOME/miniconda3/bin/conda}"
+test -x "$CONDA_BIN"
 
 rm -rf data/processed/synthetic outputs/smoke
 
-conda run --no-capture-output -n LWCL python -m lwcl.cli.generate_synthetic \
+"$CONDA_BIN" run --no-capture-output -n LWCL python -m lwcl.cli.generate_synthetic \
   --output-dir data/processed/synthetic \
   --samples-per-label 12 \
   --seed 2025
 
-conda run --no-capture-output -n LWCL python -m lwcl.cli.make_splits \
+"$CONDA_BIN" run --no-capture-output -n LWCL python -m lwcl.cli.make_splits \
   --input-manifest data/processed/synthetic/manifest.csv \
   --output-manifest data/processed/synthetic/manifest_split.csv \
   --group-field subject \
   --seed 2025
 
-if conda run --no-capture-output -n LWCL python -m lwcl.cli.train \
+if "$CONDA_BIN" run --no-capture-output -n LWCL python -m lwcl.cli.train \
   --config configs/smoke.yaml \
   --output-dir outputs/smoke/emergency \
   --max-steps 3 \
@@ -26,27 +28,27 @@ if conda run --no-capture-output -n LWCL python -m lwcl.cli.train \
 fi
 test -n "$(find outputs/smoke/emergency/checkpoints -name 'emergency_step_*.pt' -print -quit)"
 
-conda run --no-capture-output -n LWCL python -m lwcl.cli.train \
+"$CONDA_BIN" run --no-capture-output -n LWCL python -m lwcl.cli.train \
   --config configs/smoke.yaml \
   --output-dir outputs/smoke/initial \
   --max-steps 4
 
 test -s outputs/smoke/initial/checkpoints/last.pt
 
-conda run --no-capture-output -n LWCL python -m lwcl.cli.train \
+"$CONDA_BIN" run --no-capture-output -n LWCL python -m lwcl.cli.train \
   --config configs/smoke.yaml \
   --output-dir outputs/smoke/resumed \
   --resume-from outputs/smoke/initial/checkpoints/last.pt \
   --max-steps 6
 
-conda run --no-capture-output -n LWCL python -m lwcl.cli.evaluate \
+"$CONDA_BIN" run --no-capture-output -n LWCL python -m lwcl.cli.evaluate \
   --config configs/smoke.yaml \
   --checkpoint outputs/smoke/resumed/checkpoints/last.pt \
   --output-dir outputs/smoke/evaluation \
   --split test
 
 test -s outputs/smoke/evaluation/test_metrics.json
-conda run -n LWCL python - <<'PY'
+"$CONDA_BIN" run -n LWCL python - <<'PY'
 import torch
 payload = torch.load("outputs/smoke/resumed/checkpoints/last.pt", map_location="cpu", weights_only=False)
 assert payload["state"]["global_step"] == 6, payload["state"]

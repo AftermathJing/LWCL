@@ -49,6 +49,8 @@ wj@10.69.216.119
 
 The remote Conda environment name is fixed to `LWCL`.
 
+For a concise implementation-oriented summary of the thesis, read [`docs/THESIS_SPEC.md`](docs/THESIS_SPEC.md). It should be the first reference before reopening the full thesis.
+
 After cloning on the remote server:
 
 ```bash
