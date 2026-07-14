@@ -28,7 +28,9 @@ model:
     dropout: 0.1
   backbone:
     type: qwen
-    model_name_or_path: Qwen/Qwen2.5-7B-Instruct
+    # Uses the local remote-server model by default to avoid repeat downloads.
+    # Replace with a local Qwen2.5-7B-Instruct path for strict thesis replication.
+    model_name_or_path: /home/wj/Qwen3-4B
     torch_dtype: bfloat16
     device_map: null
     trust_remote_code: true

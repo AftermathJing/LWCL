@@ -139,6 +139,7 @@ Paper/default design:
 #### LLM and PEFT
 
 The thesis implementation reports Qwen2.5-7B-Instruct as the base model.
+The remote reconstruction defaults to `/home/wj/Qwen3-4B` for practical validation with existing server weights; this is an engineering default, not a thesis-equivalent model choice.
 
 Wireless embeddings are passed through `inputs_embeds`; they are not converted into text tokens. The intended tuning policy is:
 

@@ -69,7 +69,7 @@ def collate_signal_batch(batch: list[dict[str, Any]], max_seq_len: int) -> dict[
     return {
         "features": features,
         "attention_mask": mask,
-        "position_ids": torch.arange(max_length).expand(len(batch), -1),
+        "position_ids": torch.arange(max_length).unsqueeze(0).repeat(len(batch), 1),
         "labels": torch.tensor([item["label"] for item in batch], dtype=torch.long),
         "sample_ids": [item["sample_id"] for item in batch],
         "metadata": [item["metadata"] for item in batch],
