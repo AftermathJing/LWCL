@@ -20,7 +20,7 @@ for model in "${MODELS[@]}"; do
   target="$HOME/${model}"
   echo "Downloading ${repo} -> ${target}"
   mkdir -p "$target"
-  "$CONDA_BIN" run --no-capture-output -n LWCL huggingface-cli download "$repo" \
+  "$CONDA_BIN" run --no-capture-output -n LWCL python -m huggingface_hub.commands.huggingface_cli download "$repo" \
     --local-dir "$target" \
     --local-dir-use-symlinks False
 done
