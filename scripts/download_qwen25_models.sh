@@ -4,6 +4,9 @@ set -euo pipefail
 CONDA_BIN="${CONDA_BIN:-$HOME/miniconda3/bin/conda}"
 test -x "$CONDA_BIN"
 
+unset HTTP_PROXY HTTPS_PROXY
+export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+
 if [[ "$#" -gt 0 ]]; then
   MODELS=("$@")
 else
@@ -20,7 +23,7 @@ for model in "${MODELS[@]}"; do
   target="$HOME/${model}"
   echo "Downloading ${repo} -> ${target}"
   mkdir -p "$target"
-  "$CONDA_BIN" run --no-capture-output -n LWCL python -m huggingface_hub.commands.huggingface_cli download "$repo" \
+  "$CONDA_BIN" run --no-capture-output -n LWCL hf download "$repo" \
     --local-dir "$target" \
     --local-dir-use-symlinks False
 done
