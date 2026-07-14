@@ -1,0 +1,14 @@
+name: LWCL
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip>=24
+  - pytorch>=2.2,<3
+  - pytorch-cuda=12.4
+  - numpy>=1.26,<3
+  - scipy>=1.11,<2
+  - pyyaml>=6,<7
+  - pytest>=8,<9

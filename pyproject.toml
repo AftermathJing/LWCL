@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lwcl-reconstructed"
+version = "0.1.0"
+description = "Reconstruction of the LLM-Enabled Wireless Correlation Learning framework"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+  "numpy>=1.26,<3",
+  "scipy>=1.11,<2",
+  "PyYAML>=6,<7",
+  "torch>=2.2,<3",
+]
+
+[project.optional-dependencies]
+llm = [
+  "transformers>=4.45,<5",
+  "peft>=0.13,<1",
+  "accelerate>=1,<2",
+  "safetensors>=0.4,<1",
+]
+dev = ["pytest>=8,<9"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

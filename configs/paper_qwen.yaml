@@ -1,0 +1,61 @@
+data:
+  manifest: data/splits/widar3_subject_split.csv
+  num_labels: 6
+  num_receivers: 6
+  input_features: 49
+  max_seq_len: 2048
+
+model:
+  channel_attention:
+    output_dim: 64
+    hidden_dim: 32
+    dropout: 0.1
+  hste:
+    projection_dim: 128
+    window_size: 8
+    window_stride: 4
+    local_heads: 4
+    local_layers: 1
+    output_dim: 256
+    global_heads: 8
+    global_layers: 2
+    ffn_factor: 2
+    dropout: 0.1
+  adapter:
+    num_layers: 2
+    num_heads: 8
+    ffn_factor: 2
+    dropout: 0.1
+  backbone:
+    type: qwen
+    model_name_or_path: Qwen/Qwen2.5-7B-Instruct
+    torch_dtype: bfloat16
+    device_map: null
+    trust_remote_code: true
+    train_norm_layers: true
+    lora_rank: 8
+    lora_alpha: 16
+    lora_dropout: 0.1
+    target_modules: [q_proj, k_proj, v_proj, o_proj]
+    modules_to_save: [score]
+
+training:
+  seed: 2025
+  device: cuda
+  precision: bf16
+  epochs: 30
+  max_steps: null
+  batch_size: 2
+  eval_batch_size: 4
+  num_workers: 8
+  balanced_sampling: true
+  learning_rate: 0.0003
+  backbone_learning_rate: 0.00002
+  weight_decay: 0.01
+  warmup_steps: 200
+  gradient_accumulation_steps: 8
+  gradient_clip_norm: 1.0
+  log_every_steps: 10
+  eval_every_steps: 200
+  save_every_steps: 200
+  trainable_only_checkpoints: true

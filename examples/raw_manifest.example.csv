@@ -1,0 +1,3 @@
+sample_id,raw_path,label,subject,environment,position,orientation
+gesture_0001,/data/widar3/20181103/user05/push/sample001,0,S05,R1,P1,O1
+gesture_0002,/data/widar3/20181103/user05/sweep/sample001,1,S05,R1,P1,O1
