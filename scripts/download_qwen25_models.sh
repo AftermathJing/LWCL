@@ -24,6 +24,5 @@ for model in "${MODELS[@]}"; do
   echo "Downloading ${repo} -> ${target}"
   mkdir -p "$target"
   "$CONDA_BIN" run --no-capture-output -n LWCL hf download "$repo" \
-    --local-dir "$target" \
-    --local-dir-use-symlinks False
+    --local-dir "$target"
 done
