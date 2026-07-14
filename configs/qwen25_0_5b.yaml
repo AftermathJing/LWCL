@@ -6,10 +6,7 @@ data:
   max_seq_len: 2048
 
 model:
-  channel_attention:
-    output_dim: 64
-    hidden_dim: 32
-    dropout: 0.1
+  channel_attention: {output_dim: 64, hidden_dim: 32, dropout: 0.1}
   hste:
     projection_dim: 128
     window_size: 8
@@ -21,16 +18,10 @@ model:
     global_layers: 2
     ffn_factor: 2
     dropout: 0.1
-  adapter:
-    num_layers: 2
-    num_heads: 8
-    ffn_factor: 2
-    dropout: 0.1
+  adapter: {num_layers: 2, num_heads: 8, ffn_factor: 2, dropout: 0.1}
   backbone:
     type: qwen
-    # Uses the local remote-server model path.
-    # Replace with a local Qwen2.5-7B-Instruct path for strict thesis replication.
-    model_name_or_path: /home/wj/Qwen2.5-7B-Instruct
+    model_name_or_path: /home/wj/Qwen2.5-0.5B-Instruct
     torch_dtype: bfloat16
     device_map: null
     trust_remote_code: true
@@ -47,15 +38,15 @@ training:
   precision: bf16
   epochs: 30
   max_steps: null
-  batch_size: 2
-  eval_batch_size: 4
+  batch_size: 4
+  eval_batch_size: 8
   num_workers: 8
   balanced_sampling: true
   learning_rate: 0.0003
   backbone_learning_rate: 0.00002
   weight_decay: 0.01
   warmup_steps: 200
-  gradient_accumulation_steps: 8
+  gradient_accumulation_steps: 4
   gradient_clip_norm: 1.0
   log_every_steps: 10
   eval_every_steps: 200

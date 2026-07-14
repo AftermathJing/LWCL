@@ -71,7 +71,7 @@ class Trainer:
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, schedule)
         precision = self.training_config.get("precision", "fp32")
         self.autocast_dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(precision)
-        self.scaler = torch.cuda.amp.GradScaler(enabled=precision == "fp16" and self.device.type == "cuda")
+        self.scaler = torch.amp.GradScaler("cuda", enabled=precision == "fp16" and self.device.type == "cuda")
         self.logger = JsonlLogger(self.output_dir / "metrics.jsonl")
         self.state = {"epoch": 0, "global_step": 0, "best_macro_f1": -1.0}
 

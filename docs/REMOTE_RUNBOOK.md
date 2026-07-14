@@ -20,7 +20,13 @@ Before a paper-scale run:
 1. Put data outside Git, then create a manifest under an ignored data directory.
 2. Run subject-disjoint and environment-disjoint split audits.
 3. Complete `remote_smoke.sh` including save/resume and test evaluation.
-4. Confirm the Qwen model path and cache location. The default paper config points to `/home/wj/Qwen3-4B` to use existing remote weights; change it to a local Qwen2.5-7B-Instruct path for strict thesis replication.
+4. Confirm the Qwen model path and cache location. Qwen2.5 weights are expected under user-home directories such as `/home/wj/Qwen2.5-7B-Instruct`.
+
+Download exploration models if they are not already present:
+
+```bash
+bash scripts/download_qwen25_models.sh Qwen2.5-0.5B-Instruct Qwen2.5-1.5B-Instruct Qwen2.5-3B-Instruct Qwen2.5-7B-Instruct
+```
 5. Record the Git commit, resolved config, data-manifest checksum and GPU inventory.
 6. Start with short checkpoint/evaluation intervals; increase them only after a successful resume test.
 
