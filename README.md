@@ -58,3 +58,5 @@ The first full subject-disjoint Widar3 result is documented in [docs/WIDAR3_SIGN
 The current leave-one-environment-out cross-domain snapshot is recorded in [docs/WIDAR3_SIGNAL_V2_CROSS_DOMAIN_SNAPSHOT_REPORT.md](docs/WIDAR3_SIGNAL_V2_CROSS_DOMAIN_SNAPSHOT_REPORT.md).
 
 The frozen multi-seed, subject-domain audit and unified ID/CL/CO/CE/CS procedures are defined in [docs/RESULT_CONSOLIDATION_PROTOCOL.md](docs/RESULT_CONSOLIDATION_PROTOCOL.md).
+
+The completed 11,370-sample user17 and domain-confounding audit is summarized in [docs/WIDAR3_SUBJECT_DOMAIN_AUDIT.md](docs/WIDAR3_SUBJECT_DOMAIN_AUDIT.md).

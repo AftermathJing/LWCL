@@ -68,6 +68,10 @@ class SignalV2Classifier(nn.Module):
                 kernels=tuple(int(value) for value in temporal_stem.get("kernels", [3, 5])),
                 dropout=float(temporal_stem.get("dropout", 0.1)),
                 activation_name=str(activations.get("temporal_convolution", "silu")),
+                use_first_difference=bool(temporal_stem.get("use_first_difference", True)),
+                use_temporal_convolution=bool(
+                    temporal_stem.get("use_temporal_convolution", True)
+                ),
             )
             if self.use_temporal_stem
             else None
@@ -99,6 +103,10 @@ class SignalV2Classifier(nn.Module):
                 hste.get("normalized_phase_embedding", {}).get("enabled", False)
             ),
             transformer_ffn=str(hste.get("transformer_ffn", "gelu")),
+            local_position_enabled=bool(hste.get("local_position", {}).get("enabled", True)),
+            global_position_enabled=bool(
+                hste.get("global_position", {}).get("enabled", True)
+            ),
             multiscale_enabled=bool(hste.get("multiscale", {}).get("enabled", False)),
             long_window_size=int(hste.get("multiscale", {}).get("long_window_size", 9)),
             long_window_stride=int(hste.get("multiscale", {}).get("long_window_stride", 4)),

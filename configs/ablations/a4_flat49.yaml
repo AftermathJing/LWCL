@@ -1,0 +1,4 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: A4_flat49, description: Unified 49-dimensional projection instead of feature-family stems}
+model:
+  feature_stems: {mode: flat_49}

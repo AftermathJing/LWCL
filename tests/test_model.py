@@ -63,6 +63,26 @@ def test_parameter_report_has_no_language_model_components():
     assert all(name not in report["components"] for name in ("llm", "adapter", "lora", "qwen"))
 
 
+def test_temporal_and_position_ablation_flags_resolve_to_model_components():
+    no_difference = SignalV2Classifier(
+        load_config(ROOT / "configs" / "ablations" / "a5_no_first_difference.yaml")
+    )
+    assert no_difference.temporal_stem.velocity_projection is None
+    assert no_difference.temporal_stem.depthwise is not None
+
+    no_convolution = SignalV2Classifier(
+        load_config(ROOT / "configs" / "ablations" / "a5_no_temporal_convolution.yaml")
+    )
+    assert no_convolution.temporal_stem.velocity_projection is not None
+    assert no_convolution.temporal_stem.depthwise is None
+
+    no_position = SignalV2Classifier(
+        load_config(ROOT / "configs" / "ablations" / "a6_no_transformer_position.yaml")
+    )
+    assert no_position.temporal_encoder.local_position_enabled is False
+    assert no_position.temporal_encoder.global_position_enabled is False
+
+
 def test_cuda_bf16_masked_forward_when_available():
     if not torch.cuda.is_available():
         return

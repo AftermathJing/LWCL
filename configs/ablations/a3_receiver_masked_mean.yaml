@@ -1,0 +1,4 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: A3_receiver_masked_mean, description: Plain masked mean receiver fusion}
+model:
+  receiver_fusion: {mode: masked_mean, use_quality_bias: false}

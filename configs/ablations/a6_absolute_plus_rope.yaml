@@ -1,0 +1,7 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: A6_absolute_plus_rope, description: Input absolute sinusoid plus local and global RoPE}
+model:
+  hste:
+    input_absolute_position_encoding: true
+    local_position: {enabled: true}
+    global_position: {enabled: true}

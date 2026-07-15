@@ -1,0 +1,4 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: A5_no_temporal_stem, description: Remove first differences and temporal convolution}
+model:
+  temporal_stem: {enabled: false}

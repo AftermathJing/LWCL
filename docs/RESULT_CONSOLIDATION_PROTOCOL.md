@@ -74,3 +74,14 @@ The first formal ablations remain:
 6. absolute sinusoidal plus RoPE, RoPE-only, and no positional encoding.
 
 Proxy contrastive loss, CSI-ratio phase, higher-resolution DFS and multi-scale HSTE remain later experiments. They should not be mixed into the stability or attribution runs.
+
+The one-change-at-a-time configs are stored in `configs/ablations/`. Run one with:
+
+```bash
+CONFIG_PATH=configs/ablations/a4_flat49.yaml \
+OUTPUT_DIR=outputs/ablations/a4_flat49_seed2025 \
+SEED=2025 CUDA_DEVICE=5 \
+  bash scripts/run_widar3_v2_experiment.sh
+```
+
+The hop-126 and hop-25 configs remain data-gated until their own P0/P2 processed manifests are generated and audited. They must not point at P1 features while merely changing the YAML hop value.

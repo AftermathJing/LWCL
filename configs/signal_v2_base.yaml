@@ -60,6 +60,7 @@ model:
     hidden_dim: 128
     kernels: [3, 5]
     use_first_difference: true
+    use_temporal_convolution: true
     dropout: 0.10
 
   hste:
@@ -78,10 +79,12 @@ model:
     input_absolute_position_encoding: false
     local_position:
       type: rope
+      enabled: true
       position_source: window_relative
       reset_each_window: true
     global_position:
       type: rope
+      enabled: true
       position_source: original_window_center
       use_physical_time: true
       rope_time_unit_ms: 50.0

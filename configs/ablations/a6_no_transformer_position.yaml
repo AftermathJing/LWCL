@@ -1,0 +1,7 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: A6_no_transformer_position, description: Disable absolute encoding and both Transformer RoPE levels}
+model:
+  hste:
+    input_absolute_position_encoding: false
+    local_position: {enabled: false}
+    global_position: {enabled: false}

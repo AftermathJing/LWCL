@@ -1,0 +1,4 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: A3_receiver_mask_only, description: Receiver statistics and attention without quality bias}
+model:
+  receiver_fusion: {mode: quality_statistics, use_quality_bias: false}

@@ -24,32 +24,60 @@ class TemporalStem(nn.Module):
         kernels: tuple[int, ...] = (3, 5),
         dropout: float = 0.1,
         activation_name: str = "silu",
+        use_first_difference: bool = True,
+        use_temporal_convolution: bool = True,
     ) -> None:
         super().__init__()
-        self.velocity_projection = nn.Linear(hidden_dim * 2, hidden_dim)
-        self.depthwise = nn.ModuleList(
-            [
-                nn.Conv1d(hidden_dim, hidden_dim, kernel_size=kernel, padding=kernel // 2, groups=hidden_dim)
-                for kernel in kernels
-            ]
+        self.use_first_difference = use_first_difference
+        self.use_temporal_convolution = use_temporal_convolution
+        self.velocity_projection = (
+            nn.Linear(hidden_dim * 2, hidden_dim) if use_first_difference else None
         )
-        self.pointwise = nn.Conv1d(hidden_dim * len(kernels), hidden_dim, kernel_size=1)
+        self.depthwise = (
+            nn.ModuleList(
+                [
+                    nn.Conv1d(
+                        hidden_dim,
+                        hidden_dim,
+                        kernel_size=kernel,
+                        padding=kernel // 2,
+                        groups=hidden_dim,
+                    )
+                    for kernel in kernels
+                ]
+            )
+            if use_temporal_convolution
+            else None
+        )
+        self.pointwise = (
+            nn.Conv1d(hidden_dim * len(kernels), hidden_dim, kernel_size=1)
+            if use_temporal_convolution
+            else None
+        )
         self.norm = nn.LayerNorm(hidden_dim)
         self.dropout = nn.Dropout(dropout)
         self.activation_name = activation_name
 
     def forward(self, x: torch.Tensor, time_mask: torch.Tensor) -> torch.Tensor:
-        velocity = torch.zeros_like(x)
-        velocity[:, 1:] = x[:, 1:] - x[:, :-1]
-        base = self.velocity_projection(torch.cat((x, velocity), dim=-1))
-        transposed = base.transpose(1, 2)
-        local = self.pointwise(torch.cat([layer(transposed) for layer in self.depthwise], dim=1)).transpose(1, 2)
-        activated = (
-            torch.nn.functional.silu(local)
-            if self.activation_name == "silu"
-            else torch.nn.functional.gelu(local, approximate="tanh")
-        )
-        output = self.norm(base + self.dropout(activated))
+        if self.velocity_projection is not None:
+            velocity = torch.zeros_like(x)
+            velocity[:, 1:] = x[:, 1:] - x[:, :-1]
+            base = self.velocity_projection(torch.cat((x, velocity), dim=-1))
+        else:
+            base = x
+        if self.depthwise is not None and self.pointwise is not None:
+            transposed = base.transpose(1, 2)
+            local = self.pointwise(
+                torch.cat([layer(transposed) for layer in self.depthwise], dim=1)
+            ).transpose(1, 2)
+            activated = (
+                torch.nn.functional.silu(local)
+                if self.activation_name == "silu"
+                else torch.nn.functional.gelu(local, approximate="tanh")
+            )
+            output = self.norm(base + self.dropout(activated))
+        else:
+            output = self.norm(base)
         return output * time_mask.unsqueeze(-1).to(output.dtype)
 
 
@@ -94,6 +122,8 @@ class LocalGlobalTemporalEncoder(nn.Module):
         rope_time_unit_ms: float = 50.0,
         normalized_phase_enabled: bool = False,
         transformer_ffn: str = "gelu",
+        local_position_enabled: bool = True,
+        global_position_enabled: bool = True,
         multiscale_enabled: bool = False,
         long_window_size: int = 9,
         long_window_stride: int = 4,
@@ -106,6 +136,8 @@ class LocalGlobalTemporalEncoder(nn.Module):
         self.global_use_physical_time = global_use_physical_time
         self.rope_time_unit_ms = rope_time_unit_ms
         self.normalized_phase_enabled = normalized_phase_enabled
+        self.local_position_enabled = local_position_enabled
+        self.global_position_enabled = global_position_enabled
         self.multiscale_enabled = multiscale_enabled
         self.long_window_size = long_window_size
         self.long_window_stride = long_window_stride
@@ -192,6 +224,8 @@ class LocalGlobalTemporalEncoder(nn.Module):
         flat = windows.reshape(batch * num_windows, window_size, -1)
         flat_mask = mask_windows.reshape(batch * num_windows, window_size)
         local_positions = torch.arange(window_size, device=x.device).expand(batch * num_windows, -1)
+        if not self.local_position_enabled:
+            local_positions = torch.zeros_like(local_positions)
         encoded = encoder(flat, local_positions, flat_mask)
         tokens = pool(encoded, flat_mask).reshape(batch, num_windows, -1)
         output_mask = mask_windows.any(dim=-1)
@@ -258,6 +292,8 @@ class LocalGlobalTemporalEncoder(nn.Module):
             output_positions = output_times_ms / self.rope_time_unit_ms
         else:
             output_positions = center_positions.to(torch.float32)
+        if not self.global_position_enabled:
+            output_positions = torch.zeros_like(output_positions)
         output = self.global_encoder(tokens, output_positions, output_mask)
         return output, output_positions, output_mask, output_times_ms
 

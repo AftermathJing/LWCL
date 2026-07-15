@@ -1,0 +1,4 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: A5_no_temporal_convolution, description: First-difference projection without temporal convolution}
+model:
+  temporal_stem: {enabled: true, use_first_difference: true, use_temporal_convolution: false}

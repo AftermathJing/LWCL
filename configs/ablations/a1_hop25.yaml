@@ -1,0 +1,8 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: A1_hop25, description: STFT hop 25 with full Signal-v2 architecture}
+data:
+  manifest: data/splits/widar3_v2_p2_subject_split.csv
+preprocessing:
+  profile: P2
+  stft_hop: 25
+  stft_overlap: 226

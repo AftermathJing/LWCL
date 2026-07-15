@@ -22,7 +22,9 @@ def test_p1_preprocessing_and_base_position_defaults():
 
 
 def test_all_incremental_configs_resolve():
-    for path in sorted((ROOT / "configs" / "experiments").glob("*.yaml")):
+    paths = list((ROOT / "configs" / "experiments").glob("*.yaml"))
+    paths.extend((ROOT / "configs" / "ablations").glob("*.yaml"))
+    for path in sorted(paths):
         if path.name.startswith("b1_"):
             continue
         config = load_config(path)

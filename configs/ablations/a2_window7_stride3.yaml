@@ -1,0 +1,4 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: A2_window7_stride3, description: HSTE window 7 stride 3}
+model:
+  hste: {window_size: 7, window_stride: 3}
