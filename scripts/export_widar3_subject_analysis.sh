@@ -9,6 +9,7 @@ CONFIG="${CONFIG_PATH:-configs/signal_v2_base.yaml}"
 CHECKPOINT="${CHECKPOINT_PATH:?set CHECKPOINT_PATH to the frozen accepted best.pt}"
 OUTPUT="${OUTPUT_DIR:-$ROOT/outputs/subject_error_analysis}"
 FOCUS_SUBJECT="${FOCUS_SUBJECT:-user17}"
+NUM_WORKERS="${NUM_WORKERS:-2}"
 
 cd "$ROOT"
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
@@ -23,6 +24,7 @@ for SPLIT in train validation; do
     --checkpoint "$CHECKPOINT" \
     --output-dir "$OUTPUT" \
     --split "$SPLIT" \
+    --num-workers "$NUM_WORKERS" \
     --weights raw
 done
 

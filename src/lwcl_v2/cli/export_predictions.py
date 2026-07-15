@@ -195,12 +195,15 @@ def main() -> None:
     parser.add_argument("--split", choices=("train", "validation", "test"), required=True)
     parser.add_argument("--weights", choices=("raw", "ema"), default="raw")
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--num-workers", type=int)
     args = parser.parse_args()
     config = load_config(args.config)
     if args.manifest:
         config["data"]["manifest"] = args.manifest
     if args.seed is not None:
         config["training"]["seed"] = args.seed
+    if args.num_workers is not None:
+        config["training"]["num_workers"] = args.num_workers
     metrics = export_predictions(
         config,
         Path(args.checkpoint),
