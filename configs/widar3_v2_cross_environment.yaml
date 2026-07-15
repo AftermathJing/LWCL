@@ -1,0 +1,10 @@
+extends: signal_v2_base.yaml
+
+experiment:
+  id: widar3_v2_cross_environment
+  description: Signal-v2 leave-one-environment-out evaluation
+
+training:
+  selection:
+    macro_f1_weight: 1.0
+    worst_subject_macro_f1_weight: 0.0

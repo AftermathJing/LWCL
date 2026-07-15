@@ -34,12 +34,15 @@ def _git(*args: str) -> str | None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train LWCL Signal Encoder v2")
     parser.add_argument("--config", required=True)
+    parser.add_argument("--manifest")
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--resume-from")
     parser.add_argument("--max-steps", type=int)
     parser.add_argument("--debug-fail-after-step", type=int)
     args = parser.parse_args()
     config = load_config(args.config)
+    if args.manifest is not None:
+        config["data"]["manifest"] = args.manifest
     if args.max_steps is not None:
         config["training"]["max_steps"] = args.max_steps
     if args.debug_fail_after_step is not None:

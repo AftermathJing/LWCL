@@ -14,12 +14,15 @@ from lwcl_v2.training.trainer import Trainer, seed_everything
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate an LWCL-v2 checkpoint")
     parser.add_argument("--config", required=True)
+    parser.add_argument("--manifest")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--split", choices=("validation", "test"), default="test")
     parser.add_argument("--weights", choices=("ema", "raw"), default="ema")
     args = parser.parse_args()
     config = load_config(args.config)
+    if args.manifest is not None:
+        config["data"]["manifest"] = args.manifest
     seed_everything(int(config["training"].get("seed", 2025)))
     train_loader, validation_loader, test_loader = build_loaders(config, include_test=True)
     model = SignalV2Classifier(config)

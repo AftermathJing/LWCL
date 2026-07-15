@@ -27,6 +27,13 @@ def main() -> None:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--check-all-paths", action="store_true")
     parser.add_argument("--output")
+    parser.add_argument(
+        "--allow-subject-overlap",
+        action="append",
+        default=[],
+        metavar="LEFT:RIGHT",
+        help="Allow a specific subject-overlap pair, for example train:validation",
+    )
     args = parser.parse_args()
     manifest = Path(args.manifest)
     with manifest.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -87,6 +94,10 @@ def main() -> None:
         for right in subjects:
             if left < right:
                 overlap[f"{left}:{right}"] = sorted(subjects[left] & subjects[right])
+    allowed_overlap = {":".join(sorted(value.split(":"))) for value in args.allow_subject_overlap}
+    unauthorized_overlap = {
+        pair: values for pair, values in overlap.items() if values and pair not in allowed_overlap
+    }
     quality_array = np.asarray(quality_values, dtype=np.float64)
     quality_summary = {}
     if quality_array.size:
@@ -126,7 +137,7 @@ def main() -> None:
         output = Path(args.output)
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(rendered + "\n", encoding="utf-8")
-    if missing or contract_errors or any(overlap.values()):
+    if missing or contract_errors or unauthorized_overlap:
         raise SystemExit(1)
 
 

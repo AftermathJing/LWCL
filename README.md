@@ -54,3 +54,5 @@ Long training is not authorized until the preprocessing audit and save/eval/resu
 Current engineering validation, including the CUDA bf16 smoke and the 97-sample real Widar3 P1 pilot, is recorded in [docs/VALIDATION_REPORT.md](docs/VALIDATION_REPORT.md).
 
 The first full subject-disjoint Widar3 result is documented in [docs/WIDAR3_SIGNAL_V2_REPORT.md](docs/WIDAR3_SIGNAL_V2_REPORT.md): 89.42% test accuracy and 89.32% macro-F1 for Signal-v2 base.
+
+The current leave-one-environment-out cross-domain snapshot is recorded in [docs/WIDAR3_SIGNAL_V2_CROSS_DOMAIN_SNAPSHOT_REPORT.md](docs/WIDAR3_SIGNAL_V2_CROSS_DOMAIN_SNAPSHOT_REPORT.md).
