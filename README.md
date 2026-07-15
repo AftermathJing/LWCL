@@ -63,6 +63,16 @@ The smoke route uses a small Transformer so it can prove forward/backward, evalu
 
 ## Raw-data preprocessing
 
+### Widar3
+
+Build the thesis six-gesture action-group manifest directly from the released filenames:
+
+```bash
+conda run --no-capture-output -n LWCL python -m lwcl.cli.build_widar3_manifest \
+  --dataset-root data/raw/widar3_raw \
+  --output-manifest data/raw/widar3_manifest.csv
+```
+
 Create a CSV with at least:
 
 ```csv
@@ -79,7 +89,9 @@ conda run --no-capture-output -n LWCL python -m lwcl.cli.preprocess \
   --input-manifest data/raw/manifest.csv \
   --output-dir data/processed/widar3 \
   --output-manifest data/processed/widar3/manifest.csv \
-  --num-receivers 6
+  --num-receivers 6 \
+  --workers 16 \
+  --resume
 
 conda run --no-capture-output -n LWCL python -m lwcl.cli.make_splits \
   --input-manifest data/processed/widar3/manifest.csv \
@@ -87,9 +99,54 @@ conda run --no-capture-output -n LWCL python -m lwcl.cli.make_splits \
   --group-field subject
 ```
 
+The scanner groups `user-gesture-position-orientation-instance-r1.dat` through `r6.dat` as one sample. The default manifest includes gesture IDs 1-6 used by the thesis and excludes the extra gesture IDs 7-9 present in the full copied archive.
+
+### CSI-Bench
+
+CSI-Bench uses HDF5 amplitude tensors and official metadata/split files rather than Intel 5300 `.dat` receiver groups. Build model-ready per-task manifests with:
+
+```bash
+conda run --no-capture-output -n LWCL python -m lwcl.cli.prepare_csi_bench \
+  --dataset-root data/raw/CSI-Bench \
+  --output-dir data/processed/csi_bench \
+  --tasks all
+```
+
+The dataset loader converts each referenced `CSI_amps` array to a task-specific `[500,N,F]` tensor. For Localization, the three device blocks are restored as `N=3` instead of being collapsed into one channel; single-device tasks use `N=1`. This avoids duplicating the full release. See [`docs/CSI_BENCH_FORMAT.md`](docs/CSI_BENCH_FORMAT.md).
+
+Audit paths and model-facing shapes with:
+
+```bash
+conda run --no-capture-output -n LWCL python -m lwcl.cli.audit_manifest \
+  --manifest data/processed/csi_bench/Localization/manifest.csv \
+  --split train --max-seq-len 500 --check-all-paths
+```
+
 Use `--group-field environment` for strict environment-disjoint evaluation. Random sample splitting is retained only for reproducing the original thesis protocol and should not be used as the primary generalization claim.
 
 ## Training
+
+Pure signal baseline without an LLM or Adapter:
+
+```bash
+CUDA_VISIBLE_DEVICES=6 bash scripts/remote_hste_classifier_smoke.sh
+
+CUDA_VISIBLE_DEVICES=6 conda run --no-capture-output -n LWCL python -m lwcl.cli.train \
+  --config configs/widar3_hste_classifier.yaml \
+  --output-dir outputs/widar3_hste_classifier
+```
+
+This route is exactly `Channel Attention -> HSTE -> masked attention pooling -> classification head`.
+
+The completed subject-disjoint run reached **84.06% test accuracy** and **84.15% macro-F1** without an LLM or Adapter. See [`docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md`](docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md) for the full configuration, per-class metrics, confusion matrix and thesis comparison.
+
+Strict leave-one-environment-out evaluation:
+
+```bash
+CUDA_VISIBLE_DEVICES=6 bash scripts/remote_widar3_cross_environment.sh
+```
+
+Across four held-out environments, the same pure-signal model reached 84.82% equal-domain mean accuracy and 79.96% pooled out-of-domain accuracy. Environment and subject are confounded in this Widar3 subset, so this is a joint cross-environment/cross-subject result. See [`docs/WIDAR3_CROSS_DOMAIN_REPORT.md`](docs/WIDAR3_CROSS_DOMAIN_REPORT.md).
 
 Mandatory smoke:
 
@@ -155,4 +212,6 @@ No data or secrets belong in this repository.
 
 ## Current validation boundary
 
-This reconstruction is code-complete at the repository level, but paper-scale accuracy is not considered restored until the remote environment, real Widar3.0 manifest, full smoke test and controlled reproduction runs have completed.
+The remote environment and real-data preparation are now validated. Widar3 provides 11,371 processed six-receiver samples with a subject-disjoint split, and CSI-Bench provides seven official task manifests with device-aware H5 loading. Real-data tiny-model smokes passed for Widar3, FallDetection and three-device Localization. The LLM-free Channel Attention + HSTE baseline completed subject-disjoint evaluation at 84.06% accuracy / 84.15% macro-F1 and four-fold leave-one-environment-out evaluation at 84.82% equal-domain mean accuracy / 79.96% pooled accuracy.
+
+See [`docs/DATA_PREPARATION_REPORT.md`](docs/DATA_PREPARATION_REPORT.md) for exact counts and shapes, [`docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md`](docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md) for the subject-disjoint baseline, and [`docs/WIDAR3_CROSS_DOMAIN_REPORT.md`](docs/WIDAR3_CROSS_DOMAIN_REPORT.md) for the cross-domain protocol. The full thesis LWCL result is not considered reproduced until the Qwen/LoRA route is trained and compared under the same controlled split.

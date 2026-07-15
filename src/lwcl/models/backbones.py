@@ -43,6 +43,60 @@ class TinySignalBackbone(nn.Module):
         return {"loss": loss, "logits": logits, "embeddings": pooled}
 
 
+class HSTEClassificationHead(nn.Module):
+    """Masked pooling and classification directly on HSTE outputs."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        num_labels: int,
+        hidden_dim: int | None = None,
+        pooling: str = "attention",
+        dropout: float = 0.2,
+        label_smoothing: float = 0.0,
+    ) -> None:
+        super().__init__()
+        if pooling not in {"mean", "attention"}:
+            raise ValueError(f"Unsupported classifier pooling: {pooling}")
+        self.hidden_size = input_dim
+        self.pooling = pooling
+        self.label_smoothing = label_smoothing
+        self.pool_score = nn.Linear(input_dim, 1) if pooling == "attention" else None
+        hidden_dim = int(hidden_dim or input_dim)
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(input_dim),
+            nn.Linear(input_dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, num_labels),
+        )
+
+    def forward(
+        self,
+        encoded: torch.Tensor,
+        attention_mask: torch.Tensor,
+        labels: torch.Tensor | None = None,
+    ) -> dict[str, torch.Tensor | None]:
+        mask = attention_mask.to(torch.bool)
+        if self.pool_score is None:
+            weights = mask.unsqueeze(-1).to(encoded.dtype)
+            pooled = (encoded * weights).sum(dim=1) / weights.sum(dim=1).clamp_min(1.0)
+        else:
+            scores = self.pool_score(encoded).squeeze(-1)
+            scores = scores.masked_fill(~mask, torch.finfo(scores.dtype).min)
+            weights = torch.softmax(scores, dim=-1)
+            weights = torch.where(mask, weights, torch.zeros_like(weights))
+            weights = weights / weights.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+            pooled = torch.sum(encoded * weights.unsqueeze(-1), dim=1)
+        logits = self.classifier(pooled)
+        loss = (
+            F.cross_entropy(logits, labels, label_smoothing=self.label_smoothing)
+            if labels is not None
+            else None
+        )
+        return {"loss": loss, "logits": logits, "embeddings": pooled}
+
+
 class HuggingFaceSignalBackbone(nn.Module):
     """Qwen/LLM sequence-classification backend using continuous inputs_embeds and LoRA."""
 

@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 from .adapter import SignalAdapter
-from .backbones import build_backbone
+from .backbones import HSTEClassificationHead, build_backbone
 from .channel_attention import ChannelAttention
 from .hste import HierarchicalSpatioTemporalEncoder
 
@@ -22,9 +22,7 @@ class LWCLModel(nn.Module):
         self.max_seq_len = int(data_config["max_seq_len"])
         self.num_receivers = int(data_config["num_receivers"])
         self.input_features = int(data_config["input_features"])
-
-        backbone = build_backbone(model_config["backbone"], self.num_labels)
-        target_hidden_size = int(backbone.hidden_size)
+        self.architecture = model_config.get("architecture", "correlation_learning")
 
         channel_config = model_config["channel_attention"]
         self.channel_attention = ChannelAttention(
@@ -51,16 +49,35 @@ class LWCLModel(nn.Module):
             dropout=float(hste_config.get("dropout", 0.1)),
         )
 
-        adapter_config = model_config["adapter"]
-        self.adapter = SignalAdapter(
-            input_dim=int(hste_config.get("output_dim", 256)),
-            output_dim=target_hidden_size,
-            num_layers=int(adapter_config.get("num_layers", 2)),
-            num_heads=int(adapter_config.get("num_heads", 8)),
-            ffn_factor=int(adapter_config.get("ffn_factor", 2)),
-            dropout=float(adapter_config.get("dropout", 0.1)),
-        )
-        self.backbone = backbone
+        hste_output_dim = int(hste_config.get("output_dim", 256))
+        if self.architecture == "hste_classifier":
+            classifier_config = model_config.get("classifier", {})
+            self.classifier = HSTEClassificationHead(
+                input_dim=hste_output_dim,
+                num_labels=self.num_labels,
+                hidden_dim=classifier_config.get("hidden_dim"),
+                pooling=classifier_config.get("pooling", "attention"),
+                dropout=float(classifier_config.get("dropout", 0.2)),
+                label_smoothing=float(classifier_config.get("label_smoothing", 0.0)),
+            )
+            self.adapter = None
+            self.backbone = None
+        elif self.architecture == "correlation_learning":
+            backbone = build_backbone(model_config["backbone"], self.num_labels)
+            target_hidden_size = int(backbone.hidden_size)
+            adapter_config = model_config["adapter"]
+            self.adapter = SignalAdapter(
+                input_dim=hste_output_dim,
+                output_dim=target_hidden_size,
+                num_layers=int(adapter_config.get("num_layers", 2)),
+                num_heads=int(adapter_config.get("num_heads", 8)),
+                ffn_factor=int(adapter_config.get("ffn_factor", 2)),
+                dropout=float(adapter_config.get("dropout", 0.1)),
+            )
+            self.backbone = backbone
+            self.classifier = None
+        else:
+            raise ValueError(f"Unsupported model architecture: {self.architecture}")
 
     def forward(
         self,
@@ -83,9 +100,14 @@ class LWCLModel(nn.Module):
 
         signal = self.channel_attention(features, attention_mask)
         signal, reduced_positions, reduced_mask = self.hste(signal, position_ids, attention_mask)
-        aligned = self.adapter(signal, reduced_positions, reduced_mask)
-        outputs = self.backbone(aligned, reduced_positions, reduced_mask, labels)
-        outputs["signal_embeddings"] = aligned
+        if self.classifier is not None:
+            outputs = self.classifier(signal, reduced_mask, labels)
+            outputs["signal_embeddings"] = signal
+        else:
+            assert self.adapter is not None and self.backbone is not None
+            aligned = self.adapter(signal, reduced_positions, reduced_mask)
+            outputs = self.backbone(aligned, reduced_positions, reduced_mask, labels)
+            outputs["signal_embeddings"] = aligned
         outputs["reduced_attention_mask"] = reduced_mask
         return outputs
 
@@ -98,8 +120,10 @@ class LWCLModel(nn.Module):
             "trainable_percent": 100.0 * trainable / max(total, 1),
         }
         component_report: dict[str, dict[str, float | int]] = {}
-        for component_name in ("channel_attention", "hste", "adapter", "backbone"):
+        for component_name in ("channel_attention", "hste", "classifier", "adapter", "backbone"):
             component = getattr(self, component_name)
+            if component is None:
+                continue
             component_total = sum(parameter.numel() for parameter in component.parameters())
             component_trainable = sum(
                 parameter.numel() for parameter in component.parameters() if parameter.requires_grad

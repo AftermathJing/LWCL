@@ -12,10 +12,19 @@ from .intel5300 import read_receiver_file
 
 
 def complex_pca(values: np.ndarray, components: int) -> np.ndarray:
+    if values.ndim != 2:
+        raise ValueError(f"PCA input must be 2D, got {values.shape}")
+    if values.shape[0] == 0:
+        return np.zeros((0, components), dtype=np.complex64)
+    if values.shape[1] == 0:
+        return np.zeros((values.shape[0], components), dtype=np.complex64)
     centered = values - values.mean(axis=0, keepdims=True)
     _, _, vh = np.linalg.svd(centered, full_matrices=False)
     basis = vh[: min(components, vh.shape[0])].conj().T
-    return centered @ basis
+    projected = centered @ basis
+    if projected.shape[1] < components:
+        projected = np.pad(projected, ((0, 0), (0, components - projected.shape[1])))
+    return projected
 
 
 def _interpolate_time(values: np.ndarray, source_time: np.ndarray, target_time: np.ndarray) -> np.ndarray:
@@ -134,13 +143,19 @@ class CSIToFeatureProcessor:
         return _zscore(features)
 
     def process_sample_directory(self, directory: str | Path, num_receivers: int) -> np.ndarray:
-        directory = Path(directory)
-        receiver_files = sorted(
-            directory.glob("*-r*.dat"),
-            key=lambda path: int(re.search(r"-r(\d+)\.dat$", path.name).group(1)),
-        )
+        source = Path(directory)
+        if source.is_dir():
+            candidates = source.glob("*-r*.dat")
+        else:
+            candidates = source.parent.glob(f"{source.name}-r*.dat")
+        receiver_files: list[Path] = []
+        for path in candidates:
+            match = re.search(r"-r(\d+)\.dat$", path.name)
+            if match is not None:
+                receiver_files.append(path)
+        receiver_files.sort(key=lambda path: int(re.search(r"-r(\d+)\.dat$", path.name).group(1)))
         if len(receiver_files) < num_receivers:
-            raise ValueError(f"Expected {num_receivers} receiver files in {directory}, found {len(receiver_files)}")
+            raise ValueError(f"Expected {num_receivers} receiver files for {source}, found {len(receiver_files)}")
         receiver_features = [self.process_receiver(path) for path in receiver_files[:num_receivers]]
         common_length = min(feature.shape[0] for feature in receiver_features)
         feature_dim = receiver_features[0].shape[1]
