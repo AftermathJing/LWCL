@@ -136,7 +136,7 @@ training:
   warmup_ratio: 0.08
   scheduler: cosine
   gradient_clip: 1.0
-  ema_decay: 0.999
+  ema_decay: 0.0
   log_every_steps: 10
   eval_every_steps: 86
   save_every_steps: 86
