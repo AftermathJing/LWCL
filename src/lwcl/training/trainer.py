@@ -73,23 +73,32 @@ class Trainer:
         self.autocast_dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(precision)
         self.scaler = torch.amp.GradScaler("cuda", enabled=precision == "fp16" and self.device.type == "cuda")
         self.logger = JsonlLogger(self.output_dir / "metrics.jsonl")
-        self.state = {"epoch": 0, "global_step": 0, "best_macro_f1": -1.0}
+        self.state = {"epoch": 0, "global_step": 0, "best_macro_f1": -1.0, "bad_evaluations": 0}
 
     def _build_optimizer(self) -> torch.optim.Optimizer:
         encoder_lr = float(self.training_config.get("learning_rate", 3e-4))
         backbone_lr = float(self.training_config.get("backbone_learning_rate", encoder_lr))
+        classifier_lr = float(self.training_config.get("classifier_learning_rate", encoder_lr))
         weight_decay = float(self.training_config.get("weight_decay", 0.01))
         encoder_parameters: list[nn.Parameter] = []
         backbone_parameters: list[nn.Parameter] = []
+        classifier_parameters: list[nn.Parameter] = []
         for name, parameter in self.model.named_parameters():
             if not parameter.requires_grad:
                 continue
-            (backbone_parameters if name.startswith("backbone.") else encoder_parameters).append(parameter)
+            if name.startswith("backbone."):
+                backbone_parameters.append(parameter)
+            elif name.startswith("classifier."):
+                classifier_parameters.append(parameter)
+            else:
+                encoder_parameters.append(parameter)
         groups = []
         if encoder_parameters:
             groups.append({"params": encoder_parameters, "lr": encoder_lr})
         if backbone_parameters:
             groups.append({"params": backbone_parameters, "lr": backbone_lr})
+        if classifier_parameters:
+            groups.append({"params": classifier_parameters, "lr": classifier_lr})
         if not groups:
             raise ValueError("No trainable parameters were found")
         return torch.optim.AdamW(groups, weight_decay=weight_decay)
@@ -169,6 +178,8 @@ class Trainer:
         save_every = int(self.training_config.get("save_every_steps", 100))
         gradient_clip = float(self.training_config.get("gradient_clip_norm", 1.0))
         accumulation = int(self.training_config.get("gradient_accumulation_steps", 1))
+        early_stopping_patience = int(self.training_config.get("early_stopping_patience", 0))
+        early_stopping_min_delta = float(self.training_config.get("early_stopping_min_delta", 0.0))
         self.optimizer.zero_grad(set_to_none=True)
         try:
             for epoch in range(self.state["epoch"], epochs):
@@ -214,9 +225,16 @@ class Trainer:
                     if step % eval_every == 0:
                         metrics = self.evaluate()
                         self.model.train()
-                        if metrics["macro_f1"] > self.state["best_macro_f1"]:
+                        if metrics["macro_f1"] > self.state["best_macro_f1"] + early_stopping_min_delta:
                             self.state["best_macro_f1"] = metrics["macro_f1"]
+                            self.state["bad_evaluations"] = 0
                             self._save("best.pt")
+                        else:
+                            self.state["bad_evaluations"] = self.state.get("bad_evaluations", 0) + 1
+                        if early_stopping_patience and self.state["bad_evaluations"] >= early_stopping_patience:
+                            self.logger.log({"event": "early_stopping", **self.state})
+                            self._save("last.pt")
+                            return self.state
                     if step % save_every == 0:
                         self._save(f"step_{step:08d}.pt")
                         self._save("last.pt")
