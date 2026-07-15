@@ -136,14 +136,15 @@ class Trainer:
         return outputs, losses
 
     @torch.no_grad()
-    def evaluate(self, loader=None, split: str = "validation") -> dict[str, Any]:
+    def evaluate(self, loader=None, split: str = "validation", use_ema: bool = True) -> dict[str, Any]:
         loader = loader or self.validation_loader
         self.model.eval()
         predictions = []
         targets = []
         subjects: list[str] = []
         losses = []
-        with self.ema.average_parameters(self.model):
+        parameter_context = self.ema.average_parameters(self.model) if use_ema else nullcontext()
+        with parameter_context:
             for batch in loader:
                 subjects.extend(batch["subjects"])
                 batch = self._move(batch)
@@ -170,6 +171,7 @@ class Trainer:
                 "selection_score": float(score),
                 "loss": float(np.mean(losses)),
                 "split": split,
+                "weights": "ema" if use_ema else "raw",
                 "global_step": self.state["global_step"],
             }
         )

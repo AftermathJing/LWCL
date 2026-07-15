@@ -148,21 +148,23 @@ def build_loaders(config: dict[str, Any], include_test: bool = False):
         batches_per_epoch=sampler_config.get("batches_per_epoch"),
     )
     collate = partial(collate_signal_v2, max_seq_len=int(data["max_seq_len"]))
+    num_workers = int(training.get("num_workers", 4))
+    persistent_workers = num_workers > 0 and bool(training.get("persistent_workers", False))
     train_loader = DataLoader(
         train_dataset,
         batch_sampler=batch_sampler,
-        num_workers=int(training.get("num_workers", 4)),
+        num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=int(training.get("num_workers", 4)) > 0,
+        persistent_workers=persistent_workers,
         collate_fn=collate,
     )
     validation_loader = DataLoader(
         validation_dataset,
         batch_size=int(training.get("eval_batch_size", training.get("batch_size", 96))),
         shuffle=False,
-        num_workers=int(training.get("num_workers", 4)),
+        num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=int(training.get("num_workers", 4)) > 0,
+        persistent_workers=persistent_workers,
         collate_fn=collate,
     )
     if not include_test:
@@ -172,9 +174,9 @@ def build_loaders(config: dict[str, Any], include_test: bool = False):
         test_dataset,
         batch_size=int(training.get("eval_batch_size", training.get("batch_size", 96))),
         shuffle=False,
-        num_workers=int(training.get("num_workers", 4)),
+        num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=int(training.get("num_workers", 4)) > 0,
+        persistent_workers=persistent_workers,
         collate_fn=collate,
     )
     return train_loader, validation_loader, test_loader

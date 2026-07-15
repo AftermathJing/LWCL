@@ -1,0 +1,8 @@
+extends: ../signal_v2_base.yaml
+
+experiment:
+  id: signal_v2_raw_selection
+  description: Signal-v2 base with zero-lag EMA for online-weight validation and selection
+
+training:
+  ema_decay: 0.0

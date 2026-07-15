@@ -127,6 +127,7 @@ training:
   batch_size: 96
   eval_batch_size: 192
   num_workers: 8
+  persistent_workers: false
   epochs: 120
   max_steps: null
   backbone_lr: 0.0004
