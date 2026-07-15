@@ -11,6 +11,7 @@ SEEDS_TEXT="${SEEDS:-2026 2027 2028 2029}"
 
 cd "$ROOT"
 mkdir -p "$RUNS_ROOT"
+export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 
 read -r -a SEED_LIST <<< "$SEEDS_TEXT"
 for SEED in "${SEED_LIST[@]}"; do

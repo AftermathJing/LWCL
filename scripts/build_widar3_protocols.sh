@@ -9,6 +9,7 @@ OUTPUT="${OUTPUT_ROOT:-$ROOT/data/splits/widar3_v2_protocols}"
 SEED="${SEED:-2025}"
 
 cd "$ROOT"
+export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 for PROTOCOL in id cl co ce cs; do
   "$CONDA" run --no-capture-output -n "$ENV_NAME" \
     python -m lwcl_v2.cli.build_protocol_splits \

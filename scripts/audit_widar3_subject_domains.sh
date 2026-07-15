@@ -9,6 +9,7 @@ OUTPUT="${OUTPUT_DIR:-$ROOT/outputs/audits/widar3_subject_domains}"
 FOCUS_SUBJECT="${FOCUS_SUBJECT:-user17}"
 
 cd "$ROOT"
+export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 "$CONDA" run --no-capture-output -n "$ENV_NAME" \
   python -m lwcl_v2.cli.audit_subject_domains \
   --manifest "$MANIFEST" \
