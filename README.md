@@ -140,6 +140,14 @@ This route is exactly `Channel Attention -> HSTE -> masked attention pooling -> 
 
 The completed subject-disjoint run reached **84.06% test accuracy** and **84.15% macro-F1** without an LLM or Adapter. See [`docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md`](docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md) for the full configuration, per-class metrics, confusion matrix and thesis comparison.
 
+Strict leave-one-environment-out evaluation:
+
+```bash
+CUDA_VISIBLE_DEVICES=6 bash scripts/remote_widar3_cross_environment.sh
+```
+
+Across four held-out environments, the same pure-signal model reached 84.82% equal-domain mean accuracy and 79.96% pooled out-of-domain accuracy. Environment and subject are confounded in this Widar3 subset, so this is a joint cross-environment/cross-subject result. See [`docs/WIDAR3_CROSS_DOMAIN_REPORT.md`](docs/WIDAR3_CROSS_DOMAIN_REPORT.md).
+
 Mandatory smoke:
 
 ```bash
@@ -204,6 +212,6 @@ No data or secrets belong in this repository.
 
 ## Current validation boundary
 
-The remote environment and real-data preparation are now validated. Widar3 provides 11,371 processed six-receiver samples with a subject-disjoint split, and CSI-Bench provides seven official task manifests with device-aware H5 loading. Real-data tiny-model smokes passed for Widar3, FallDetection and three-device Localization. The LLM-free Channel Attention + HSTE baseline has also completed full training and independent test evaluation at 84.06% accuracy / 84.15% macro-F1.
+The remote environment and real-data preparation are now validated. Widar3 provides 11,371 processed six-receiver samples with a subject-disjoint split, and CSI-Bench provides seven official task manifests with device-aware H5 loading. Real-data tiny-model smokes passed for Widar3, FallDetection and three-device Localization. The LLM-free Channel Attention + HSTE baseline completed subject-disjoint evaluation at 84.06% accuracy / 84.15% macro-F1 and four-fold leave-one-environment-out evaluation at 84.82% equal-domain mean accuracy / 79.96% pooled accuracy.
 
-See [`docs/DATA_PREPARATION_REPORT.md`](docs/DATA_PREPARATION_REPORT.md) for exact counts, shapes and the four unusable Widar3 raw groups, and [`docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md`](docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md) for the pure-signal baseline. The full thesis LWCL result is not considered reproduced until the Qwen/LoRA route is trained and compared under the same controlled split.
+See [`docs/DATA_PREPARATION_REPORT.md`](docs/DATA_PREPARATION_REPORT.md) for exact counts and shapes, [`docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md`](docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md) for the subject-disjoint baseline, and [`docs/WIDAR3_CROSS_DOMAIN_REPORT.md`](docs/WIDAR3_CROSS_DOMAIN_REPORT.md) for the cross-domain protocol. The full thesis LWCL result is not considered reproduced until the Qwen/LoRA route is trained and compared under the same controlled split.
