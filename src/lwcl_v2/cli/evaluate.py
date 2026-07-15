@@ -15,6 +15,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate an LWCL-v2 checkpoint")
     parser.add_argument("--config", required=True)
     parser.add_argument("--manifest")
+    parser.add_argument("--seed", type=int)
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--split", choices=("validation", "test"), default="test")
@@ -23,6 +24,8 @@ def main() -> None:
     config = load_config(args.config)
     if args.manifest is not None:
         config["data"]["manifest"] = args.manifest
+    if args.seed is not None:
+        config["training"]["seed"] = args.seed
     seed_everything(int(config["training"].get("seed", 2025)))
     train_loader, validation_loader, test_loader = build_loaders(config, include_test=True)
     model = SignalV2Classifier(config)

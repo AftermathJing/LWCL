@@ -35,6 +35,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Train LWCL Signal Encoder v2")
     parser.add_argument("--config", required=True)
     parser.add_argument("--manifest")
+    parser.add_argument("--seed", type=int)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--resume-from")
     parser.add_argument("--max-steps", type=int)
@@ -43,6 +44,8 @@ def main() -> None:
     config = load_config(args.config)
     if args.manifest is not None:
         config["data"]["manifest"] = args.manifest
+    if args.seed is not None:
+        config["training"]["seed"] = args.seed
     if args.max_steps is not None:
         config["training"]["max_steps"] = args.max_steps
     if args.debug_fail_after_step is not None:
@@ -59,6 +62,7 @@ def main() -> None:
         "config_hash": config_hash(config),
         "manifest": str(manifest.resolve()),
         "manifest_sha256": _sha256(manifest),
+        "seed": int(config["training"].get("seed", 2025)),
         "python": platform.python_version(),
     }
     (output_dir / "run_metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")

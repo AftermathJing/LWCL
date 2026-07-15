@@ -179,6 +179,7 @@ class Trainer:
                 "loss": float(np.mean(losses)),
                 "split": split,
                 "weights": "ema" if (use_ema and self.ema is not None) else "raw",
+                "epoch": self.state["epoch"],
                 "global_step": self.state["global_step"],
             }
         )
