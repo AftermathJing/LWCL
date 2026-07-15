@@ -20,12 +20,15 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--split", choices=("validation", "test"), default="test")
     parser.add_argument("--weights", choices=("ema", "raw"), default="raw")
+    parser.add_argument("--num-workers", type=int)
     args = parser.parse_args()
     config = load_config(args.config)
     if args.manifest is not None:
         config["data"]["manifest"] = args.manifest
     if args.seed is not None:
         config["training"]["seed"] = args.seed
+    if args.num_workers is not None:
+        config["training"]["num_workers"] = args.num_workers
     seed_everything(int(config["training"].get("seed", 2025)))
     train_loader, validation_loader, test_loader = build_loaders(config, include_test=True)
     model = SignalV2Classifier(config)

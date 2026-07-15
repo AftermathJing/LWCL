@@ -8,6 +8,7 @@ GPU="${CUDA_DEVICE:-7}"
 CONFIG="${CONFIG_PATH:-configs/signal_v2_base.yaml}"
 RUNS_ROOT="${RUNS_ROOT:-$ROOT/outputs/widar3_signal_v2_multiseed}"
 SEEDS_TEXT="${SEEDS:-2026 2027 2028 2029}"
+NUM_WORKERS="${NUM_WORKERS:-2}"
 
 cd "$ROOT"
 mkdir -p "$RUNS_ROOT"
@@ -38,6 +39,7 @@ for SEED in "${SEED_LIST[@]}"; do
       python -m lwcl_v2.cli.train \
       --config "$CONFIG" \
       --seed "$SEED" \
+      --num-workers "$NUM_WORKERS" \
       --output-dir "$TRAIN_DIR" \
       "${RESUME_ARGS[@]}" \
       2>&1 | tee -a "$RUN_DIR/train.log"
@@ -51,6 +53,7 @@ for SEED in "${SEED_LIST[@]}"; do
       python -m lwcl_v2.cli.evaluate \
       --config "$TRAIN_DIR/resolved_config.yaml" \
       --seed "$SEED" \
+      --num-workers "$NUM_WORKERS" \
       --checkpoint "$TRAIN_DIR/checkpoints/best.pt" \
       --output-dir "$EVAL_DIR" \
       --split "$SPLIT" \

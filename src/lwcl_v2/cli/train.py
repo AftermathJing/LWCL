@@ -39,6 +39,7 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--resume-from")
     parser.add_argument("--max-steps", type=int)
+    parser.add_argument("--num-workers", type=int)
     parser.add_argument("--debug-fail-after-step", type=int)
     args = parser.parse_args()
     config = load_config(args.config)
@@ -48,6 +49,8 @@ def main() -> None:
         config["training"]["seed"] = args.seed
     if args.max_steps is not None:
         config["training"]["max_steps"] = args.max_steps
+    if args.num_workers is not None:
+        config["training"]["num_workers"] = args.num_workers
     if args.debug_fail_after_step is not None:
         config["training"]["debug_fail_after_step"] = args.debug_fail_after_step
     seed_everything(int(config["training"].get("seed", 2025)))

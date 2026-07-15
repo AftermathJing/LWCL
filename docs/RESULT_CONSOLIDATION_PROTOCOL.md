@@ -13,6 +13,8 @@ SEEDS="2026 2027 2028 2029" CUDA_DEVICE=7 \
   bash scripts/run_widar3_v2_multiseed.sh
 ```
 
+`NUM_WORKERS` defaults to 2 in the launcher because the shared server can be CPU/I/O saturated even when GPU memory is free. This runtime setting does not alter batches, augmentations or model optimization.
+
 Each seed writes separate training and evaluation artifacts:
 
 ```text

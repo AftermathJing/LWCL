@@ -9,6 +9,7 @@ CONFIG="${CONFIG_PATH:?set CONFIG_PATH to a Signal-v2 experiment config}"
 SEED="${SEED:-2025}"
 OUTPUT="${OUTPUT_DIR:?set OUTPUT_DIR for this experiment run}"
 MANIFEST="${MANIFEST_PATH:-}"
+NUM_WORKERS="${NUM_WORKERS:-2}"
 
 cd "$ROOT"
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
@@ -35,6 +36,7 @@ else
     python -m lwcl_v2.cli.train \
     --config "$CONFIG" \
     --seed "$SEED" \
+    --num-workers "$NUM_WORKERS" \
     --output-dir "$OUTPUT/train" \
     "${MANIFEST_ARGS[@]}" \
     "${RESUME_ARGS[@]}" \
@@ -48,6 +50,7 @@ for SPLIT in validation test; do
     python -m lwcl_v2.cli.evaluate \
     --config "$OUTPUT/train/resolved_config.yaml" \
     --seed "$SEED" \
+    --num-workers "$NUM_WORKERS" \
     --checkpoint "$OUTPUT/train/checkpoints/best.pt" \
     --output-dir "$OUTPUT/eval" \
     --split "$SPLIT" \
