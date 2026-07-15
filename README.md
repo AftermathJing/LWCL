@@ -101,6 +101,45 @@ conda run --no-capture-output -n LWCL python -m lwcl.cli.make_splits \
 
 The scanner groups `user-gesture-position-orientation-instance-r1.dat` through `r6.dat` as one sample. The default manifest includes gesture IDs 1-6 used by the thesis and excludes the extra gesture IDs 7-9 present in the full copied archive.
 
+### Wi-CBR image reconstruction on Widar3
+
+The AAAI 2026 Wi-CBR reproduction path does not consume the thesis `[T,6,49]` tensors directly. It reconstructs two image branches from raw Widar3 CSI:
+
+- phase image
+- DFS image
+
+The renderer can start from the current subject-disjoint or cross-environment split manifests even though they no longer carry `raw_path`. It automatically joins back to `data/raw/widar3_manifest.csv` by `sample_id`.
+
+Small smoke example:
+
+```bash
+conda run --no-capture-output -n LWCL python -m lwcl.cli.prepare_wicbr \
+  --input-manifest data/splits/widar3_subject_split.csv \
+  --output-dir data/processed/widar3_wicbr \
+  --output-manifest data/splits/widar3_wicbr_subject_split.csv \
+  --phase-source weighted \
+  --resume
+```
+
+This writes:
+
+- `phase_raw/`
+- `phase_weighted/`
+- `dfs/`
+- `dfs_weight/`
+
+and a manifest whose `phase_path` is already aligned with the selected phase source.
+
+If the images already exist, attach them to any other split without re-rendering:
+
+```bash
+conda run --no-capture-output -n LWCL python -m lwcl.cli.attach_wicbr_paths \
+  --input-manifest data/splits/widar3_cross_environment/20181130/manifest.csv \
+  --image-root data/processed/widar3_wicbr \
+  --output-manifest data/splits/widar3_cross_environment/20181130/wicbr_manifest.csv \
+  --phase-source weighted
+```
+
 ### CSI-Bench
 
 CSI-Bench uses HDF5 amplitude tensors and official metadata/split files rather than Intel 5300 `.dat` receiver groups. Build model-ready per-task manifests with:
@@ -147,6 +186,47 @@ CUDA_VISIBLE_DEVICES=6 bash scripts/remote_widar3_cross_environment.sh
 ```
 
 Across four held-out environments, the same pure-signal model reached 84.82% equal-domain mean accuracy and 79.96% pooled out-of-domain accuracy. Environment and subject are confounded in this Widar3 subset, so this is a joint cross-environment/cross-subject result. See [`docs/WIDAR3_CROSS_DOMAIN_REPORT.md`](docs/WIDAR3_CROSS_DOMAIN_REPORT.md).
+
+Wi-CBR reproduction route:
+
+```bash
+conda run --no-capture-output -n LWCL python -m lwcl.cli.train_wicbr \
+  --config configs/widar3_wicbr_subject.yaml \
+  --manifest data/splits/widar3_wicbr_subject_split.csv \
+  --output-dir outputs/widar3_wicbr_subject
+```
+
+Minimal remote smoke:
+
+```bash
+bash scripts/remote_wicbr_subject_smoke.sh
+```
+
+Formal remote subject-disjoint run:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash scripts/remote_wicbr_subject.sh
+```
+
+Formal remote cross-environment run:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 bash scripts/remote_wicbr_cross_environment.sh
+```
+
+The completed formal Wi-CBR run reached **63.57% subject-disjoint test accuracy / 64.68% macro-F1**. Four leave-one-environment-out folds reached **82.09% equal-fold mean accuracy / 82.28% macro-F1** and **75.41% pooled accuracy / 75.42% pooled macro-F1**. See [`docs/WIDAR3_WICBR_REPRODUCTION_REPORT.md`](docs/WIDAR3_WICBR_REPRODUCTION_REPORT.md) for the fidelity boundary, exact environment, manifest hashes, commands, and full results. The generated detailed tables are in [`docs/WIDAR3_WICBR_SUBJECT_REPORT.md`](docs/WIDAR3_WICBR_SUBJECT_REPORT.md) and [`docs/WIDAR3_WICBR_CROSS_DOMAIN_REPORT.md`](docs/WIDAR3_WICBR_CROSS_DOMAIN_REPORT.md).
+
+Generate markdown reports after the runs complete:
+
+```bash
+python scripts/generate_wicbr_reports.py \
+  --subject-output outputs/widar3_wicbr_subject \
+  --subject-test-output outputs/widar3_wicbr_subject_test \
+  --subject-manifest data/splits/widar3_wicbr_subject_split.csv \
+  --subject-report docs/WIDAR3_WICBR_SUBJECT_REPORT.md \
+  --cross-root outputs/widar3_wicbr_cross_environment \
+  --cross-report docs/WIDAR3_WICBR_CROSS_DOMAIN_REPORT.md
+```
 
 Mandatory smoke:
 
@@ -214,4 +294,4 @@ No data or secrets belong in this repository.
 
 The remote environment and real-data preparation are now validated. Widar3 provides 11,371 processed six-receiver samples with a subject-disjoint split, and CSI-Bench provides seven official task manifests with device-aware H5 loading. Real-data tiny-model smokes passed for Widar3, FallDetection and three-device Localization. The LLM-free Channel Attention + HSTE baseline completed subject-disjoint evaluation at 84.06% accuracy / 84.15% macro-F1 and four-fold leave-one-environment-out evaluation at 84.82% equal-domain mean accuracy / 79.96% pooled accuracy.
 
-See [`docs/DATA_PREPARATION_REPORT.md`](docs/DATA_PREPARATION_REPORT.md) for exact counts and shapes, [`docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md`](docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md) for the subject-disjoint baseline, and [`docs/WIDAR3_CROSS_DOMAIN_REPORT.md`](docs/WIDAR3_CROSS_DOMAIN_REPORT.md) for the cross-domain protocol. The full thesis LWCL result is not considered reproduced until the Qwen/LoRA route is trained and compared under the same controlled split.
+See [`docs/DATA_PREPARATION_REPORT.md`](docs/DATA_PREPARATION_REPORT.md) for exact counts and shapes, [`docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md`](docs/WIDAR3_HSTE_CLASSIFIER_REPORT.md) for the subject-disjoint baseline, [`docs/WIDAR3_CROSS_DOMAIN_REPORT.md`](docs/WIDAR3_CROSS_DOMAIN_REPORT.md) for the HSTE cross-domain protocol, and [`docs/WIDAR3_WICBR_REPRODUCTION_REPORT.md`](docs/WIDAR3_WICBR_REPRODUCTION_REPORT.md) for the completed Wi-CBR reproduction. The full thesis LWCL result is not considered reproduced until the Qwen/LoRA route is trained and compared under the same controlled split.
