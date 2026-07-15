@@ -260,5 +260,14 @@ class QualityAwareCSIProcessor:
         arrays = self.process_group(receiver_paths)
         target = Path(output_path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(target, **arrays, metadata=np.asarray(json.dumps(metadata, ensure_ascii=False)))
+        temporary = target.with_name(f"{target.stem}.tmp.npz")
+        try:
+            np.savez_compressed(
+                temporary,
+                **arrays,
+                metadata=np.asarray(json.dumps(metadata, ensure_ascii=False)),
+            )
+            temporary.replace(target)
+        finally:
+            temporary.unlink(missing_ok=True)
         return target

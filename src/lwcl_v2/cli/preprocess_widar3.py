@@ -49,6 +49,12 @@ def process_one(task: tuple[dict[str, Any], dict[str, str], str, str]) -> tuple[
     output_path = output_root / "features" / f"{sample_id}.npz"
     try:
         paths = receiver_paths(input_root, sample_id, processor.num_receivers)
+        try:
+            if output_path.exists():
+                with np.load(output_path, allow_pickle=False) as archive:
+                    _ = archive["time_mask"].shape, archive["receiver_mask"].shape
+        except (OSError, ValueError, EOFError, KeyError):
+            output_path.unlink(missing_ok=True)
         if not output_path.exists():
             processor.save_group(paths, output_path, metadata=row)
         with np.load(output_path, allow_pickle=False) as archive:

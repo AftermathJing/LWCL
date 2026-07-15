@@ -4,10 +4,35 @@ import numpy as np
 import torch
 
 from lwcl_v2.data.augment import SignalAugmenter
+from lwcl_v2.data.intel5300 import parse_csi
 from lwcl_v2.data.preprocessing import QualityAwareCSIProcessor
 from lwcl_v2.data.quality import estimate_quality
 from lwcl_v2.data.sampler import CrossSubjectBatchSampler
 from lwcl_v2.training.losses import CrossSubjectSupervisedContrastiveLoss
+
+
+def _scalar_parse_csi(payload: bytes, num_tx: int, num_rx: int) -> np.ndarray:
+    csi = np.zeros((num_tx, num_rx, 30), dtype=np.complex64)
+    bit_index = 0
+    for subcarrier in range(30):
+        bit_index += 3
+        remainder = bit_index % 8
+        for rx in range(num_rx):
+            for tx in range(num_tx):
+                start = bit_index // 8
+                real_raw = ((payload[start] >> remainder) | (payload[start + 1] << (8 - remainder))) & 0xFF
+                imag_raw = ((payload[start + 1] >> remainder) | (payload[start + 2] << (8 - remainder))) & 0xFF
+                real = real_raw - 256 if real_raw >= 128 else real_raw
+                imag = imag_raw - 256 if imag_raw >= 128 else imag_raw
+                csi[tx, rx, subcarrier] = complex(real, imag)
+                bit_index += 16
+    return csi
+
+
+def test_vectorized_intel5300_decoder_matches_scalar_reference():
+    payload = np.random.default_rng(17).integers(0, 256, size=2048, dtype=np.uint8).tobytes()
+    for num_tx, num_rx in ((1, 3), (2, 3), (3, 3)):
+        assert np.array_equal(parse_csi(payload, num_tx, num_rx), _scalar_parse_csi(payload, num_tx, num_rx))
 
 
 def test_differential_csi_preserves_stream_and_subcarrier_axes():

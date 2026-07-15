@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -20,25 +21,38 @@ def total_rssi(record: dict[str, Any]) -> float:
     return _db_power(power) - 44.0 - record["agc"]
 
 
-def parse_csi(payload: bytes, num_tx: int, num_rx: int) -> np.ndarray:
-    """Decode Intel 5300 CSI payload to [Ntx,Nrx,30] complex values."""
-    csi = np.zeros((num_tx, num_rx, 30), dtype=np.complex64)
+@lru_cache(maxsize=None)
+def _decoder_indices(num_tx: int, num_rx: int) -> tuple[np.ndarray, np.ndarray]:
+    """Precompute byte offsets and bit shifts in subcarrier/rx/tx order."""
+    starts = []
+    remainders = []
     bit_index = 0
     for subcarrier in range(30):
         bit_index += 3
         remainder = bit_index % 8
         for rx in range(num_rx):
             for tx in range(num_tx):
-                start = bit_index // 8
-                if start + 2 >= len(payload):
-                    raise ValueError("Truncated CSI payload")
-                real_raw = ((payload[start] >> remainder) | (payload[start + 1] << (8 - remainder))) & 0xFF
-                imag_raw = ((payload[start + 1] >> remainder) | (payload[start + 2] << (8 - remainder))) & 0xFF
-                real = real_raw - 256 if real_raw >= 128 else real_raw
-                imag = imag_raw - 256 if imag_raw >= 128 else imag_raw
-                csi[tx, rx, subcarrier] = complex(real, imag)
+                starts.append(bit_index // 8)
+                remainders.append(remainder)
                 bit_index += 16
-    return csi
+    return np.asarray(starts, dtype=np.int64), np.asarray(remainders, dtype=np.uint16)
+
+
+def parse_csi(payload: bytes, num_tx: int, num_rx: int) -> np.ndarray:
+    """Decode Intel 5300 CSI payload to [Ntx,Nrx,30] complex values."""
+    starts, remainders = _decoder_indices(num_tx, num_rx)
+    if starts.size == 0 or int(starts[-1]) + 2 >= len(payload):
+        raise ValueError("Truncated CSI payload")
+    packed = np.frombuffer(payload, dtype=np.uint8).astype(np.uint16, copy=False)
+    inverse_shifts = 8 - remainders
+    real_raw = ((packed[starts] >> remainders) | (packed[starts + 1] << inverse_shifts)) & 0xFF
+    imag_raw = ((packed[starts + 1] >> remainders) | (packed[starts + 2] << inverse_shifts)) & 0xFF
+    real = real_raw.astype(np.int16)
+    imag = imag_raw.astype(np.int16)
+    real[real >= 128] -= 256
+    imag[imag >= 128] -= 256
+    values = (real + 1j * imag).astype(np.complex64)
+    return values.reshape(30, num_rx, num_tx).transpose(2, 1, 0)
 
 
 def read_bfee_file(path: str | Path) -> list[dict[str, Any]]:

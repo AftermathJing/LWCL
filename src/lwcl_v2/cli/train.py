@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import subprocess
 from pathlib import Path
@@ -49,8 +50,8 @@ def main() -> None:
     save_resolved_config(config, output_dir / "resolved_config.yaml")
     manifest = Path(config["data"]["manifest"])
     metadata = {
-        "git_commit": _git("rev-parse", "HEAD"),
-        "git_branch": _git("branch", "--show-current"),
+        "git_commit": os.environ.get("LWCL_CODE_COMMIT") or _git("rev-parse", "HEAD"),
+        "git_branch": os.environ.get("LWCL_CODE_BRANCH") or _git("branch", "--show-current"),
         "git_status": _git("status", "--porcelain"),
         "config_hash": config_hash(config),
         "manifest": str(manifest.resolve()),
