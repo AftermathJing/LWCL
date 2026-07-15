@@ -10,6 +10,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
+from .csi_bench import load_csi_bench_h5
+
 
 class SignalDataset(Dataset):
     def __init__(
@@ -38,8 +40,23 @@ class SignalDataset(Dataset):
         path = Path(row["feature_path"])
         if not path.is_absolute():
             path = self.root / path
-        with np.load(path, allow_pickle=False) as archive:
-            features = archive["features"].astype(np.float32)
+        feature_format = row.get("feature_format", "").lower() or path.suffix.lower().lstrip(".")
+        if feature_format in {"h5", "hdf5"}:
+            num_subcarriers = int(float(row["num_sub"])) if row.get("num_sub") else None
+            features = load_csi_bench_h5(
+                path,
+                data_key=row.get("data_key") or "CSI_amps",
+                num_subcarriers=num_subcarriers,
+                num_devices=int(row.get("device_count") or 1),
+                target_time=int(row.get("target_time") or 500),
+                target_receivers=int(row.get("target_receivers") or 1),
+                target_features=int(row.get("target_features") or 232),
+            )
+        elif feature_format == "npz":
+            with np.load(path, allow_pickle=False) as archive:
+                features = archive["features"].astype(np.float32)
+        else:
+            raise ValueError(f"Unsupported feature format {feature_format!r} for {path}")
         if features.ndim != 3:
             raise ValueError(f"Expected [T,N,F] in {path}, got {features.shape}")
         if features.shape[0] > self.max_seq_len:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 import random
 from collections import defaultdict
 from pathlib import Path
@@ -14,7 +15,9 @@ def create_group_splits(
     validation_ratio: float = 0.15,
     seed: int = 2025,
 ) -> dict[str, int]:
-    with Path(input_manifest).open("r", encoding="utf-8-sig", newline="") as handle:
+    input_manifest = Path(input_manifest).resolve()
+    output_manifest = Path(output_manifest).resolve()
+    with input_manifest.open("r", encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     if not rows:
         raise ValueError("Input manifest is empty")
@@ -47,7 +50,11 @@ def create_group_splits(
     for row in rows:
         key = row["sample_id"] if group_field == "sample" else row[group_field]
         row["split"] = assignments[key]
-    output_manifest = Path(output_manifest)
+        for path_field in ("feature_path", "raw_path"):
+            value = row.get(path_field)
+            if value and not Path(value).is_absolute():
+                absolute_path = (input_manifest.parent / value).resolve()
+                row[path_field] = Path(os.path.relpath(absolute_path, output_manifest.parent)).as_posix()
     output_manifest.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = list(rows[0])
     if "split" not in fieldnames:
