@@ -34,9 +34,25 @@ The v2 quality gate excluded one additional validation sample whose six receiver
 
 ## Training correction
 
-The first run used `ema_decay=0.999`. It selected an EMA checkpoint with only 20.25% test macro-F1, while the raw weights stored in the same step-860 checkpoint reached 77.15% test macro-F1. Training is short enough that the 0.999 EMA remained strongly biased toward initialization and was therefore unsuitable for model selection.
+The first run used `ema_decay=0.999` and selected EMA weights. That run produced only 20.25% test macro-F1, while the raw weights saved in the same step-860 checkpoint reached 77.15% test macro-F1.
 
-The accepted run changed only EMA lag to zero, making validation and selection use the current online weights. Architecture, data, augmentations, subject-balanced sampler, SupCon loss, optimizer, learning-rate schedule and seed remained unchanged. The project default now uses zero-lag EMA until a separately validated EMA schedule is introduced.
+This is now explained without requiring an update-frequency bug: the bad checkpoint was at step 860, so the initial-weight residual under 0.999 EMA was still about `0.999^860 ≈ 0.42`. In other words, the EMA shadow still contained roughly 42% initialization signal, which is fully capable of overwhelming a rapidly improving online model early in training.
+
+The implementation was then cleaned up in two ways:
+
+1. EMA is now a true optional feature controlled by:
+
+```yaml
+training:
+  use_ema: false
+```
+
+2. EMA state now records `num_updates`, and unit tests verify:
+   - decay 0 produces exact agreement with the online model;
+   - positive decay follows the expected moving-average formula;
+   - the default base configuration disables EMA while keeping a decay value available for future controlled re-enablement.
+
+The accepted run therefore uses the online model directly for validation, checkpoint selection and final testing. Architecture, data, augmentations, subject-balanced sampler, SupCon loss, optimizer, learning-rate schedule and seed remained unchanged.
 
 ## Best validation checkpoint
 

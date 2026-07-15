@@ -18,7 +18,7 @@ def main() -> None:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--split", choices=("validation", "test"), default="test")
-    parser.add_argument("--weights", choices=("ema", "raw"), default="ema")
+    parser.add_argument("--weights", choices=("ema", "raw"), default="raw")
     args = parser.parse_args()
     config = load_config(args.config)
     if args.manifest is not None:
@@ -31,7 +31,7 @@ def main() -> None:
     trainer.state.update(payload["state"])
     loader = validation_loader if args.split == "validation" else test_loader
     metrics = trainer.evaluate(loader, split=args.split, use_ema=args.weights == "ema")
-    filename = f"{args.split}_metrics.json" if args.weights == "ema" else f"{args.split}_raw_metrics.json"
+    filename = f"{args.split}_ema_metrics.json" if args.weights == "ema" else f"{args.split}_metrics.json"
     output = Path(args.output_dir) / filename
     output.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(metrics, ensure_ascii=False))

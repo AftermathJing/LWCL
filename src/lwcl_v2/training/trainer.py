@@ -71,7 +71,12 @@ class Trainer:
         precision = self.training.get("precision", "bf16")
         self.autocast_dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(precision)
         self.scaler = torch.amp.GradScaler("cuda", enabled=precision == "fp16" and self.device.type == "cuda")
-        self.ema = ExponentialMovingAverage(self.model, float(self.training.get("ema_decay", 0.999)))
+        self.use_ema = bool(self.training.get("use_ema", False))
+        self.ema = (
+            ExponentialMovingAverage(self.model, float(self.training.get("ema_decay", 0.999)))
+            if self.use_ema
+            else None
+        )
         loss_config = config["loss"]
         self.criterion = SignalV2Loss(
             label_smoothing=float(config["model"]["classifier"].get("label_smoothing", 0.02)),
@@ -143,7 +148,9 @@ class Trainer:
         targets = []
         subjects: list[str] = []
         losses = []
-        parameter_context = self.ema.average_parameters(self.model) if use_ema else nullcontext()
+        parameter_context = (
+            self.ema.average_parameters(self.model) if (use_ema and self.ema is not None) else nullcontext()
+        )
         with parameter_context:
             for batch in loader:
                 subjects.extend(batch["subjects"])
@@ -171,7 +178,7 @@ class Trainer:
                 "selection_score": float(score),
                 "loss": float(np.mean(losses)),
                 "split": split,
-                "weights": "ema" if use_ema else "raw",
+                "weights": "ema" if (use_ema and self.ema is not None) else "raw",
                 "global_step": self.state["global_step"],
             }
         )
@@ -229,7 +236,8 @@ class Trainer:
                     self.scaler.update()
                     self.optimizer.zero_grad(set_to_none=True)
                     self.scheduler.step()
-                    self.ema.update(self.model)
+                    if self.ema is not None:
+                        self.ema.update(self.model)
                     self.state["global_step"] += 1
                     step = self.state["global_step"]
                     debug_fail = self.training.get("debug_fail_after_step")

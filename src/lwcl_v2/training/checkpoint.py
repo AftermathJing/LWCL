@@ -18,7 +18,7 @@ def save_checkpoint(
     optimizer: torch.optim.Optimizer,
     scheduler: torch.optim.lr_scheduler.LRScheduler,
     scaler: torch.amp.GradScaler,
-    ema: ExponentialMovingAverage,
+    ema: ExponentialMovingAverage | None,
     state: dict[str, Any],
     config: dict[str, Any],
 ) -> Path:
@@ -29,7 +29,7 @@ def save_checkpoint(
         "optimizer": optimizer.state_dict(),
         "scheduler": scheduler.state_dict(),
         "scaler": scaler.state_dict(),
-        "ema": ema.state_dict(),
+        "ema": ema.state_dict() if ema is not None else None,
         "state": state,
         "config": config,
         "rng": {
@@ -62,7 +62,7 @@ def load_checkpoint(
         scheduler.load_state_dict(payload["scheduler"])
     if scaler is not None:
         scaler.load_state_dict(payload["scaler"])
-    if ema is not None:
+    if ema is not None and payload.get("ema") is not None:
         ema.load_state_dict(payload["ema"])
     if restore_rng:
         random.setstate(payload["rng"]["python"])
