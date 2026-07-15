@@ -16,11 +16,11 @@ __pycache__/
 *credentials*.json
 *secret*.json
 secrets/
-/data/
-/outputs/
-/checkpoints/
-/logs/
-/runs/
+/data
+/outputs
+/checkpoints
+/logs
+/runs
 /wandb/
 /tensorboard/
 /models/

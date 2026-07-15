@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 
 import yaml
+import numpy as np
 
+from lwcl_v2.cli.analyze_subject_errors import analyze_subject
 from lwcl_v2.cli.audit_subject_domains import build_audit
 from lwcl_v2.cli.build_protocol_splits import build_protocol_splits
 from lwcl_v2.cli.summarize_multiseed import summarize_runs
@@ -110,3 +112,38 @@ def test_cross_location_and_cross_subject_protocols_are_disjoint(tmp_path: Path)
         assert not any(report["subject_overlap"].values())
         tested_subjects.extend(report["subjects"]["test"])
     assert sorted(tested_subjects) == [f"user{index}" for index in range(1, 7)]
+
+
+def test_subject_error_analysis_reports_groups_calibration_and_distances(tmp_path: Path):
+    outputs = tmp_path / "validation_outputs.npz"
+    reference = tmp_path / "train_outputs.npz"
+    labels = np.asarray([0, 1, 0, 1])
+    probabilities = np.asarray(
+        [[0.9, 0.1], [0.2, 0.8], [0.4, 0.6], [0.7, 0.3]], dtype=np.float32
+    )
+    np.savez_compressed(
+        outputs,
+        sample_ids=np.asarray(["a", "b", "c", "d"]),
+        subjects=np.asarray(["user17"] * 4),
+        labels=labels,
+        predictions=probabilities.argmax(axis=1),
+        probabilities=probabilities,
+        embeddings=np.asarray([[1, 0], [0, 1], [1, 0.1], [0.1, 1]], dtype=np.float32),
+        sequence_lengths=np.asarray([20, 25, 40, 45]),
+        valid_receivers=np.asarray([6, 6, 5, 6]),
+        receiver_quality_mean=np.ones((4, 5), dtype=np.float32),
+        environments=np.asarray(["e1"] * 4),
+        positions=np.asarray(["1", "1", "2", "2"]),
+        orientations=np.asarray(["1", "2", "1", "2"]),
+    )
+    np.savez_compressed(
+        reference,
+        subjects=np.asarray(["user1", "user1", "user2", "user2"]),
+        labels=labels,
+        embeddings=np.asarray([[1, 0], [0, 1], [0.8, 0.2], [0.2, 0.8]], dtype=np.float32),
+    )
+    report = analyze_subject(outputs, "user17", reference, num_labels=2)
+    assert report["count"] == 4
+    assert set(report["by_position"]) == {"1", "2"}
+    assert report["calibration"]["nll"] > 0
+    assert set(report["distance_to_reference_subjects"]) == {"user1", "user2"}

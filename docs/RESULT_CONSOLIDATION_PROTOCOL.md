@@ -85,3 +85,16 @@ SEED=2025 CUDA_DEVICE=5 \
 ```
 
 The hop-126 and hop-25 configs remain data-gated until their own P0/P2 processed manifests are generated and audited. They must not point at P1 features while merely changing the YAML hop value.
+
+## Frozen-checkpoint subject error analysis
+
+Per-sample predictions and embeddings can be exported without retraining:
+
+```bash
+CHECKPOINT_PATH=/path/to/frozen/best.pt \
+OUTPUT_DIR=outputs/subject_error_analysis \
+FOCUS_SUBJECT=user17 CUDA_DEVICE=5 \
+  bash scripts/export_widar3_subject_analysis.sh
+```
+
+The output contains train/validation probabilities, embeddings, sequence lengths, valid-receiver counts and mean receiver-quality vectors. The final subject report includes confusion matrix, per-class F1, position/orientation/length/receiver-count groups, ECE, NLL, error confidence and same-gesture cosine distance to each training subject.
