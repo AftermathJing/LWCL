@@ -1,0 +1,6 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: position_A, description: Absolute sinusoid plus local and global RoPE}
+model:
+  hste:
+    input_absolute_position_encoding: true
+    normalized_phase_embedding: {enabled: false}

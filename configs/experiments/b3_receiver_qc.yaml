@@ -1,0 +1,4 @@
+extends: b2_time_resolution.yaml
+experiment: {id: B3, description: Add receiver quality control and receiver masks}
+data:
+  manifest: data/splits/widar3_v2_subject_split.csv

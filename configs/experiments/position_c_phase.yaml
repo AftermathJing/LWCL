@@ -1,0 +1,6 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: position_C, description: RoPE-only plus zero-initialized normalized phase residual}
+model:
+  hste:
+    input_absolute_position_encoding: false
+    normalized_phase_embedding: {enabled: true}

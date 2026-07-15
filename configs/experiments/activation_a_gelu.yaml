@@ -1,0 +1,8 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: activation_A, description: GELU front-end and GELU Transformer FFN}
+activations:
+  feature_fusion: gelu
+  receiver_shared_encoder: gelu
+  temporal_convolution: gelu
+model:
+  hste: {transformer_ffn: gelu}

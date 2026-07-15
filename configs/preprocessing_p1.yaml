@@ -1,0 +1,8 @@
+extends: preprocessing_p0.yaml
+
+preprocessing:
+  stft_hop: 50
+  stft_overlap: 201
+
+quality_control:
+  minimum_packets: 451

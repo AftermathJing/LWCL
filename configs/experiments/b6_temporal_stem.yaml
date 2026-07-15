@@ -1,0 +1,4 @@
+extends: b5_receiver_fusion.yaml
+experiment: {id: B6, description: Add multi-kernel temporal convolution and first differences}
+model:
+  temporal_stem: {enabled: true}

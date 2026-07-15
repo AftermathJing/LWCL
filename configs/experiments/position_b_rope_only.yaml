@@ -1,0 +1,6 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: position_B, description: Recommended local-relative and physical-center RoPE only}
+model:
+  hste:
+    input_absolute_position_encoding: false
+    normalized_phase_embedding: {enabled: false}

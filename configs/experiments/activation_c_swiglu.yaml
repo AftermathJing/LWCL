@@ -1,0 +1,4 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: activation_C, description: SiLU front-end and parameter-matched SwiGLU Transformer FFN}
+model:
+  hste: {transformer_ffn: swiglu}

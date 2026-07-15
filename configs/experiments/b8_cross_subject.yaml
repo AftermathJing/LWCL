@@ -1,0 +1,2 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: B8, description: Full base with cross-subject sampler SupCon and augmentations}

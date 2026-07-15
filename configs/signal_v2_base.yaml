@@ -1,0 +1,152 @@
+architecture: signal_v2_classifier
+activations:
+  rssi_stem: silu
+  doppler_stem: silu
+  differential_csi_stem: silu
+  feature_fusion: silu
+  receiver_shared_encoder: silu
+  temporal_convolution: silu
+  local_transformer_ffn: gelu
+  global_transformer_ffn: gelu
+  window_pooling_mlp: gelu
+  classifier: gelu
+  independent_gate: sigmoid
+  competitive_gate: softmax
+  residual_modulation_gate: tanh
+experiment:
+  id: B8
+  description: Full Signal-v2 base with cross-subject sampling and SupCon
+
+data:
+  manifest: data/splits/widar3_v2_subject_split.csv
+  num_labels: 6
+  num_receivers: 6
+  min_valid_receivers: 5
+  max_seq_len: 96
+  doppler_bins: 25
+  differential_components: 10
+  quality_dim: 5
+
+preprocessing:
+  profile: P1
+  sample_rate: 1000
+  stft_window: 251
+  stft_hop: 50
+  stft_overlap: 201
+  stft_nfft: 256
+  doppler_min_hz: -60
+  doppler_max_hz: 60
+  doppler_bins: 25
+
+model:
+  feature_stems:
+    rssi_dim: 16
+    doppler_dim: 64
+    differential_csi_dim: 48
+    fused_dim: 128
+    dropout: 0.10
+
+  receiver_fusion:
+    shared_encoder_layers: 1
+    hidden_dim: 128
+    attention_heads: 4
+    use_mean_pool: true
+    use_max_pool: true
+    use_std_pool: true
+    use_quality_bias: true
+    dropout: 0.10
+
+  temporal_stem:
+    hidden_dim: 128
+    kernels: [3, 5]
+    use_first_difference: true
+    dropout: 0.10
+
+  hste:
+    projection_dim: 192
+    window_size: 5
+    window_stride: 2
+    local_heads: 4
+    local_layers: 1
+    output_dim: 256
+    global_heads: 8
+    global_layers: 2
+    ffn_factor: 2
+    transformer_ffn: gelu
+    dropout: 0.10
+    window_pooling: attentive_mean
+    input_absolute_position_encoding: false
+    local_position:
+      type: rope
+      position_source: window_relative
+      reset_each_window: true
+    global_position:
+      type: rope
+      position_source: original_window_center
+      use_physical_time: true
+      rope_time_unit_ms: 50.0
+    normalized_phase_embedding:
+      enabled: false
+
+  classifier:
+    pooling: attentive_statistics
+    hidden_dim: 256
+    dropout: 0.20
+    label_smoothing: 0.02
+
+loss:
+  cross_entropy_weight: 1.0
+  supervised_contrastive_weight: 0.10
+  contrastive_temperature: 0.10
+
+augmentation:
+  amplitude_scale:
+    probability: 0.5
+    range: [0.90, 1.10]
+  gaussian_noise:
+    probability: 0.3
+    std_range: [0.005, 0.015]
+  temporal_shift:
+    probability: 0.5
+    max_frames: 2
+  temporal_mask:
+    probability: 0.3
+    max_ratio: 0.10
+  receiver_dropout:
+    probability: 0.25
+    max_receivers: 1
+  doppler_frequency_mask:
+    probability: 0.25
+    max_bins: 2
+
+training:
+  seed: 2025
+  device: cuda
+  precision: bf16
+  optimizer: adamw
+  batch_size: 96
+  eval_batch_size: 192
+  num_workers: 8
+  epochs: 120
+  max_steps: null
+  backbone_lr: 0.0004
+  classifier_lr: 0.0008
+  weight_decay: 0.03
+  warmup_ratio: 0.08
+  scheduler: cosine
+  gradient_clip: 1.0
+  ema_decay: 0.999
+  log_every_steps: 10
+  eval_every_steps: 86
+  save_every_steps: 86
+  early_stopping_patience: 20
+  early_stopping_min_delta: 0.0005
+  selection:
+    macro_f1_weight: 0.7
+    worst_subject_macro_f1_weight: 0.3
+  subject_balanced_sampler:
+    gestures_per_batch: 6
+    subjects_per_gesture: 4
+    samples_per_subject: 4
+    batches_per_epoch: 86
+  trainable_only_checkpoints: false

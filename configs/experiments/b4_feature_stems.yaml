@@ -1,0 +1,4 @@
+extends: b3_receiver_qc.yaml
+experiment: {id: B4, description: Add RSSI Doppler and differential-CSI family stems}
+model:
+  feature_stems: {mode: family_stems}

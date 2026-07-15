@@ -1,0 +1,21 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: B2, description: P1 time resolution with flat 49-D features and minimal fusion}
+data:
+  manifest: data/splits/widar3_v2_p1_legacy_alignment.csv
+model:
+  feature_stems: {mode: flat_49}
+  receiver_fusion: {mode: masked_mean, use_quality_bias: false}
+  temporal_stem: {enabled: false}
+  hste:
+    projection_dim: 128
+    window_size: 5
+    window_stride: 2
+    local_heads: 4
+    local_layers: 1
+    output_dim: 256
+    global_heads: 8
+    global_layers: 2
+    ffn_factor: 2
+  classifier: {pooling: attention}
+loss: {supervised_contrastive_weight: 0.0}
+augmentation: {}

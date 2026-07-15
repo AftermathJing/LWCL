@@ -1,0 +1,24 @@
+data:
+  num_receivers: 6
+  min_valid_receivers: 5
+
+preprocessing:
+  sample_rate: 1000
+  filter_low_hz: 2.0
+  filter_high_hz: 60.0
+  stft_window: 251
+  stft_hop: 126
+  stft_overlap: 125
+  stft_nfft: 256
+  doppler_min_hz: -60
+  doppler_max_hz: 60
+  doppler_bins: 25
+  doppler_pca_components: 3
+  differential_pca_components: 10
+
+quality_control:
+  enabled: true
+  alignment_strategy: median_valid
+  minimum_packets: 755
+  minimum_length_ratio: 0.60
+  maximum_timestamp_gap_ratio: 0.10

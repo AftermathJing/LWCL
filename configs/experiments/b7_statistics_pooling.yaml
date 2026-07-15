@@ -1,0 +1,4 @@
+extends: b6_temporal_stem.yaml
+experiment: {id: B7, description: Add attentive statistics pooling}
+model:
+  classifier: {pooling: attentive_statistics}

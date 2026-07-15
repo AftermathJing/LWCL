@@ -1,0 +1,8 @@
+extends: preprocessing_p1.yaml
+
+data:
+  min_valid_receivers: 6
+
+quality_control:
+  enabled: false
+  alignment_strategy: minimum

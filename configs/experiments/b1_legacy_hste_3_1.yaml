@@ -1,0 +1,44 @@
+# Run with the archived v1 `lwcl.cli.train`; this schema intentionally matches v1.
+data:
+  manifest: data/splits/widar3_subject_split.csv
+  num_labels: 6
+  num_receivers: 6
+  input_features: 49
+  max_seq_len: 64
+model:
+  architecture: hste_classifier
+  channel_attention: {output_dim: 128, hidden_dim: 64, dropout: 0.2}
+  hste:
+    projection_dim: 128
+    window_size: 3
+    window_stride: 1
+    local_heads: 8
+    local_layers: 2
+    output_dim: 256
+    global_heads: 8
+    global_layers: 2
+    ffn_factor: 4
+    dropout: 0.2
+  classifier: {hidden_dim: 256, pooling: attention, dropout: 0.25, label_smoothing: 0.05}
+training:
+  seed: 2025
+  device: cuda
+  precision: bf16
+  epochs: 60
+  max_steps: null
+  batch_size: 256
+  eval_batch_size: 512
+  num_workers: 8
+  balanced_sampling: true
+  learning_rate: 0.0003
+  classifier_learning_rate: 0.001
+  weight_decay: 0.01
+  warmup_steps: 66
+  gradient_accumulation_steps: 1
+  gradient_clip_norm: 1.0
+  log_every_steps: 10
+  eval_every_steps: 33
+  save_every_steps: 33
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.001
+  trainable_only_checkpoints: false

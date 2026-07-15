@@ -1,0 +1,4 @@
+extends: b4_feature_stems.yaml
+experiment: {id: B5, description: Add quality-aware mean max std attention receiver fusion}
+model:
+  receiver_fusion: {mode: quality_statistics, use_quality_bias: true}

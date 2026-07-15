@@ -1,0 +1,2 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: activation_B, description: Recommended SiLU front-end and GELU Transformer FFN}

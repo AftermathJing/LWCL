@@ -1,0 +1,8 @@
+extends: ../signal_v2_base.yaml
+experiment: {id: B9, description: Add long 9/4 local branch and cross-scale attention}
+model:
+  hste:
+    multiscale:
+      enabled: true
+      long_window_size: 9
+      long_window_stride: 4
