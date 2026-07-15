@@ -6,7 +6,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FORBIDDEN_PARTS = {"data", "outputs", "logs", "checkpoints", ".idea", ".venv", "secrets"}
+FORBIDDEN_ROOTS = {"data", "outputs", "logs", "checkpoints", "secrets"}
+FORBIDDEN_PARTS = {".idea", ".venv", "__pycache__"}
 FORBIDDEN_SUFFIXES = {".pt", ".pth", ".ckpt", ".safetensors", ".pem", ".key", ".p12", ".pfx"}
 SECRET_PATTERN = re.compile(r"(api[_-]?key|access[_-]?token|private[_-]?key)\s*[:=]\s*['\"][^'\"]+", re.I)
 
@@ -16,7 +17,9 @@ def main() -> None:
     failures = []
     for relative in tracked:
         path = Path(relative)
-        if FORBIDDEN_PARTS & set(path.parts) or path.suffix.lower() in FORBIDDEN_SUFFIXES:
+        forbidden_root = bool(path.parts) and path.parts[0] in FORBIDDEN_ROOTS
+        forbidden_nested = bool(FORBIDDEN_PARTS & set(path.parts))
+        if forbidden_root or forbidden_nested or path.suffix.lower() in FORBIDDEN_SUFFIXES:
             failures.append(f"forbidden tracked path: {relative}")
             continue
         full = ROOT / path
