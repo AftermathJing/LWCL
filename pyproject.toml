@@ -11,8 +11,11 @@ dependencies = [
   "numpy>=1.26,<3",
   "scipy>=1.11,<2",
   "h5py>=3.10,<4",
+  "matplotlib>=3.8,<4",
+  "Pillow>=10,<12",
   "PyYAML>=6,<7",
   "torch>=2.2,<3",
+  "torchvision>=0.17,<1",
 ]
 
 [project.optional-dependencies]

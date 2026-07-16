@@ -1,0 +1,35 @@
+data:
+  manifest: data/splits/widar3_wicbr_subject_smoke.csv
+  num_labels: 6
+  image_size: 224
+  phase_field: phase_path
+  dfs_field: dfs_path
+
+model:
+  pretrained: true
+  group_num: 4
+  gate_threshold: 0.5
+
+training:
+  seed: 42
+  device: cuda
+  precision: fp32
+  epochs: 2
+  max_steps: 3
+  batch_size: 4
+  eval_batch_size: 4
+  num_workers: 2
+  balanced_sampling: false
+  learning_rate: 0.0001
+  weight_decay: 0.0
+  temperature: 0.1
+  beta_1: 0.1
+  step_lr:
+    step_size: 3
+    gamma: 0.5
+  gradient_clip_norm: 1.0
+  log_every_steps: 1
+  eval_every_steps: 1
+  save_every_steps: 1
+  early_stopping_patience: 0
+  debug_fail_after_step: 1
