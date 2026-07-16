@@ -27,6 +27,7 @@ def resolve_csi_bench_path(dataset_root: str | Path, task_dir: str | Path, file_
         original if original.is_absolute() else None,
         task / original,
         root / original,
+        root / "Multitask" / original,
     ]
     for candidate in candidates:
         if candidate is not None and candidate.resolve().exists():
@@ -193,4 +194,3 @@ def build_har_protocol_manifests(
             writer.writerows(rows)
         summaries[protocol] = {"samples": len(rows), **dict(counts)}
     return summaries
-
