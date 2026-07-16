@@ -198,3 +198,109 @@ def test_wicbr_manifest_adapter_duplicates_official_test_as_validation(tmp_path:
     rows = list(csv.DictReader(output_manifest.open("r", encoding="utf-8-sig", newline="")))
     assert summary["counts"] == {"train": 1, "validation": 1, "test": 1}
     assert sorted(row["split"] for row in rows) == ["test", "train", "validation"]
+
+
+def test_wicbr_manifest_adapter_uses_stratified_source_validation(tmp_path: Path):
+    processed_manifest = tmp_path / "processed.csv"
+    official_manifest = tmp_path / "cr1.csv"
+    feature_root = tmp_path / "features"
+    feature_root.mkdir()
+    processed_rows = []
+    official_rows = []
+    for environment in ("source_a", "source_b"):
+        for label in ("0", "1"):
+            for index in range(8):
+                sample_id = f"{environment}_{label}_{index}"
+                processed_rows.append(
+                    {
+                        "sample_id": sample_id,
+                        "feature_path": str((feature_root / f"{sample_id}.npz").resolve()),
+                        "subject": f"u{index}",
+                        "label": label,
+                        "feature_format": "npz-v2",
+                    }
+                )
+                official_rows.append(
+                    {
+                        "sample_id": sample_id,
+                        "split": "train",
+                        "environment": environment,
+                        "subject": f"u{index}",
+                        "label": label,
+                    }
+                )
+    for index in range(4):
+        sample_id = f"target_{index}"
+        label = str(index % 2)
+        processed_rows.append(
+            {
+                "sample_id": sample_id,
+                "feature_path": str((feature_root / f"{sample_id}.npz").resolve()),
+                "subject": f"target_u{index}",
+                "label": label,
+                "feature_format": "npz-v2",
+            }
+        )
+        official_rows.append(
+            {
+                "sample_id": sample_id,
+                "split": "test",
+                "environment": "target",
+                "subject": f"target_u{index}",
+                "label": label,
+            }
+        )
+
+    for path, rows, fieldnames in (
+        (
+            processed_manifest,
+            processed_rows,
+            ["sample_id", "feature_path", "subject", "label", "feature_format"],
+        ),
+        (
+            official_manifest,
+            official_rows,
+            ["sample_id", "split", "environment", "subject", "label"],
+        ),
+    ):
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+    output_manifest = tmp_path / "adapted" / "manifest.csv"
+    summary = build_protocol_manifest(
+        processed_manifest,
+        official_manifest,
+        output_manifest,
+        duplicate_test_as_validation=False,
+        source_validation_fraction=0.25,
+        source_validation_salt="test-salt",
+    )
+    rows = list(csv.DictReader(output_manifest.open("r", encoding="utf-8-sig", newline="")))
+    split_ids = {
+        split: {row["sample_id"] for row in rows if row["split"] == split}
+        for split in ("train", "validation", "test")
+    }
+    official_train_ids = {
+        row["sample_id"] for row in official_rows if row["split"] == "train"
+    }
+    official_test_ids = {
+        row["sample_id"] for row in official_rows if row["split"] == "test"
+    }
+    assert summary["validation_source"] == "source_train_stratified"
+    assert summary["counts"] == {"train": 24, "validation": 8, "test": 4}
+    assert split_ids["validation"] <= official_train_ids
+    assert split_ids["test"] == official_test_ids
+    assert split_ids["train"].isdisjoint(split_ids["validation"])
+    assert split_ids["validation"].isdisjoint(split_ids["test"])
+    assert {
+        (row["environment"], row["label"])
+        for row in rows
+        if row["split"] == "validation"
+    } == {
+        ("source_a", "0"),
+        ("source_a", "1"),
+        ("source_b", "0"),
+        ("source_b", "1"),
+    }

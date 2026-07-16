@@ -13,16 +13,27 @@ OFFICIAL_SPLIT_DIR="${OFFICIAL_SPLIT_DIR:-/home/wj/LWCL-official-protocol/tmp/wi
 MANIFEST_ROOT="${MANIFEST_ROOT:-$ROOT/data/splits/widar3_signal_v2_wicbr_protocol}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$ROOT/outputs/widar3_signal_v2_wicbr_protocol}"
 CONFIG="${CONFIG_PATH:-configs/widar3_signal_v2_wicbr_protocol.yaml}"
+SOURCE_VALIDATION_FRACTION="${SOURCE_VALIDATION_FRACTION:-}"
+SOURCE_VALIDATION_SALT="${SOURCE_VALIDATION_SALT:-wicbr-source-validation-v1}"
 
 cd "$ROOT"
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
+
+BUILD_ARGS=()
+if [[ -n "$SOURCE_VALIDATION_FRACTION" ]]; then
+  BUILD_ARGS+=(
+    --source-validation-fraction "$SOURCE_VALIDATION_FRACTION"
+    --source-validation-salt "$SOURCE_VALIDATION_SALT"
+  )
+fi
 
 "$CONDA" run --no-capture-output -n "$ENV_NAME" \
   python -m lwcl_v2.cli.build_wicbr_protocol_manifests \
   --processed-manifest "$PROCESSED_MANIFEST" \
   --official-split-dir "$OFFICIAL_SPLIT_DIR" \
   --output-dir "$MANIFEST_ROOT" \
-  --protocols $PROTOCOLS
+  --protocols $PROTOCOLS \
+  "${BUILD_ARGS[@]}"
 
 for PROTOCOL in $PROTOCOLS; do
   MANIFEST="$MANIFEST_ROOT/$PROTOCOL/manifest.csv"

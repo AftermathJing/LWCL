@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 from collections import Counter, defaultdict
@@ -13,12 +14,46 @@ def read_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def select_source_validation_ids(
+    official_rows: list[dict[str, str]],
+    fraction: float,
+    salt: str,
+) -> set[str]:
+    if not 0.0 < fraction < 1.0:
+        raise ValueError(f"source_validation_fraction must be in (0, 1), got {fraction}")
+    strata: dict[tuple[str, str], list[str]] = defaultdict(list)
+    for row in official_rows:
+        if row["split"] == "train":
+            strata[(row.get("environment", ""), row.get("label", ""))].append(
+                row["sample_id"]
+            )
+
+    selected: set[str] = set()
+    for key, sample_ids in sorted(strata.items()):
+        if len(sample_ids) <= 1:
+            continue
+        ranked = sorted(
+            sample_ids,
+            key=lambda sample_id: hashlib.sha256(
+                f"{salt}|{key[0]}|{key[1]}|{sample_id}".encode("utf-8")
+            ).digest(),
+        )
+        count = max(1, int(len(ranked) * fraction + 0.5))
+        count = min(count, len(ranked) - 1)
+        selected.update(ranked[:count])
+    if not selected:
+        raise ValueError("Source validation selection produced no samples")
+    return selected
+
+
 def build_protocol_manifest(
     processed_manifest: Path,
     official_manifest: Path,
     output_manifest: Path,
     duplicate_test_as_validation: bool = True,
     allow_missing_reference: bool = True,
+    source_validation_fraction: float | None = None,
+    source_validation_salt: str = "wicbr-source-validation-v1",
 ) -> dict[str, object]:
     processed_rows = read_rows(processed_manifest)
     official_rows = read_rows(official_manifest)
@@ -31,6 +66,19 @@ def build_protocol_manifest(
     counts = Counter()
     envs: dict[str, set[str]] = defaultdict(set)
     subjects: dict[str, set[str]] = defaultdict(set)
+    if duplicate_test_as_validation and source_validation_fraction is not None:
+        raise ValueError(
+            "duplicate_test_as_validation and source_validation_fraction are mutually exclusive"
+        )
+    source_validation_ids = (
+        select_source_validation_ids(
+            official_rows,
+            fraction=source_validation_fraction,
+            salt=source_validation_salt,
+        )
+        if source_validation_fraction is not None
+        else set()
+    )
 
     for official in official_rows:
         sample_id = official["sample_id"]
@@ -61,11 +109,13 @@ def build_protocol_manifest(
         split = official["split"]
         if split == "train":
             row = dict(base)
-            row["split"] = "train"
+            row["split"] = (
+                "validation" if sample_id in source_validation_ids else "train"
+            )
             rows.append(row)
-            counts["train"] += 1
-            envs["train"].add(row.get("environment", ""))
-            subjects["train"].add(row.get("subject", ""))
+            counts[row["split"]] += 1
+            envs[row["split"]].add(row.get("environment", ""))
+            subjects[row["split"]].add(row.get("subject", ""))
         elif split == "test":
             if duplicate_test_as_validation:
                 validation = dict(base)
@@ -97,6 +147,17 @@ def build_protocol_manifest(
         "environments": {key: sorted(value) for key, value in envs.items()},
         "subjects": {key: sorted(value) for key, value in subjects.items()},
         "missing_reference_samples": missing_reference,
+        "validation_source": (
+            "source_train_stratified"
+            if source_validation_fraction is not None
+            else "duplicated_target_test"
+            if duplicate_test_as_validation
+            else "none"
+        ),
+        "source_validation_fraction": source_validation_fraction,
+        "source_validation_salt": (
+            source_validation_salt if source_validation_fraction is not None else None
+        ),
     }
     (output_manifest.parent / "summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
@@ -113,6 +174,10 @@ def main() -> None:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--protocols", nargs="+", default=["cr1", "cr2", "cr3"])
     parser.add_argument("--no-duplicate-test-as-validation", action="store_true")
+    parser.add_argument("--source-validation-fraction", type=float)
+    parser.add_argument(
+        "--source-validation-salt", default="wicbr-source-validation-v1"
+    )
     parser.add_argument("--strict-missing-reference", action="store_true")
     args = parser.parse_args()
 
@@ -129,8 +194,13 @@ def main() -> None:
             processed_manifest=processed_manifest,
             official_manifest=official_manifest,
             output_manifest=output_manifest,
-            duplicate_test_as_validation=not args.no_duplicate_test_as_validation,
+            duplicate_test_as_validation=(
+                not args.no_duplicate_test_as_validation
+                and args.source_validation_fraction is None
+            ),
             allow_missing_reference=not args.strict_missing_reference,
+            source_validation_fraction=args.source_validation_fraction,
+            source_validation_salt=args.source_validation_salt,
         )
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "summary.json").write_text(
