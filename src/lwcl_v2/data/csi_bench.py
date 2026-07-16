@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
+from scipy import signal as scipy_signal
 
 
 HAR_PROTOCOLS = (
@@ -83,39 +84,122 @@ def load_csi_bench_amplitude(
 ) -> dict[str, np.ndarray]:
     """Load one CSI-Bench H5 sample as T00-compatible amplitude features.
 
-    The benchmark stores ``CSI_amps`` as a frequency/time plane. For the
-    multi-device tasks, device planes are concatenated along frequency and are
-    split back into an explicit receiver axis before interpolation.
+    Mimics the Widar3 QualityAwareCSIProcessor pipeline: amplitude →
+    differential → STFT → Doppler spectrum + differential CSI PCA so that
+    the T00 feature-family stems receive the same signal types (RSSI proxy,
+    DFS, differential CSI pairs) as during Widar3 training.
     """
     try:
         import h5py
     except ImportError as exc:  # pragma: no cover
         raise ImportError("CSI-Bench amplitude loading requires h5py") from exc
     with h5py.File(path, "r") as handle:
-        key = next((name for name in ("CSI_amps", "csi", "CSI") if name in handle), None)
-        if key is None:
-            raise KeyError(f"No CSI amplitude dataset in {path}; keys={list(handle.keys())}")
-        values = _orient_frequency_time(np.asarray(handle[key]), num_subcarriers)
+        values = _orient_frequency_time(np.asarray(handle["CSI_amps"]), num_subcarriers)
     devices = int(num_devices)
-    if devices < 1 or values.shape[1] % devices:
+    if devices < 1 or values.shape[-1] % devices:
         raise ValueError(f"Frequency width {values.shape[1]} is incompatible with num_devices={devices}")
-    values = values.reshape(values.shape[0], devices, values.shape[1] // devices)
-    mean = values.mean(axis=(0, 2), keepdims=True)
-    std = values.std(axis=(0, 2), keepdims=True)
-    values = (values - mean) / np.maximum(std, 1e-6)
-    values = resample_frequency(values, int(amplitude_bins))
-    length = values.shape[0]
+    # --- per-device amplitude → differential → STFT ---------------------------------
+    sample_rate = 100  # CSI-Bench packets are ~10 ms, verified by README
+    device_signals = values.reshape(values.shape[0], devices, values.shape[1] // devices)
+    device_signals = (device_signals - device_signals.mean(axis=(0, 2), keepdims=True)) / np.maximum(
+        device_signals.std(axis=(0, 2), keepdims=True), 1e-6
+    )
+    doppler_list: list[np.ndarray] = []
+    differential_list: list[np.ndarray] = []
+    rssi_list: list[np.ndarray] = []
+    stft_times: np.ndarray | None = None
+    for d in range(devices):
+        amp = device_signals[:, d, :]  # [T, F_device]
+        # differential CSI (帧间差 via 实幅度, 构造假复数避免改动主干)
+        diff_amplitude = np.diff(amp, axis=0)  # [T-1, F_device]
+        diff_amplitude = np.vstack([diff_amplitude[:1], diff_amplitude])  # keep T
+        # bandpass filter 2-60 Hz
+        sos = scipy_signal.butter(4, [2.0, 60.0], btype="bandpass", fs=sample_rate, output="sos")
+        if diff_amplitude.shape[0] > 16:
+            filtered = scipy_signal.sosfiltfilt(sos, diff_amplitude, axis=0)
+        else:
+            filtered = scipy_signal.sosfilt(sos, diff_amplitude, axis=0)
+        fake_complex = (filtered + 1j * np.zeros_like(filtered)).astype(np.complex64)
+        # PCA reduce to 3 components for STFT (matching Widar3 doppler_pca_components)
+        centered = fake_complex - fake_complex.mean(axis=0, keepdims=True)
+        _, _, vh = np.linalg.svd(centered, full_matrices=False)
+        available = min(3, vh.shape[0])
+        principal = (centered @ vh[:available].conj().T).astype(np.complex64)
+        if available < 3:
+            principal = np.pad(principal, ((0, 0), (0, 3 - available)))
+        # STFT on each PCA component
+        spectra: list[np.ndarray] = []
+        for comp in range(3):
+            freqs, times, zxx = scipy_signal.stft(
+                principal[:, comp],
+                fs=sample_rate,
+                window="hann",
+                nperseg=min(64, principal.shape[0]),  # shorter window for ~500-sample signals
+                noverlap=min(48, principal.shape[0] // 2),
+                nfft=128,
+                return_onesided=False,
+                boundary=None,
+                padded=True,
+            )
+            spectra.append(np.abs(zxx))
+            if stft_times is None:
+                stft_times = times
+        energy = np.sum(spectra, axis=0)  # [freq, time]
+        order = np.argsort(freqs)
+        freqs = freqs[order]
+        energy = energy[order]
+        # [-60, 60] Hz Doppler range → 25 bins max-pool
+        mask = (freqs >= -60.0) & (freqs <= 60.0)
+        freqs = freqs[mask]
+        energy = energy[mask]
+        bands = np.array_split(np.arange(energy.shape[0]), 25)
+        dfs = np.stack(
+            [energy[idx].max(axis=0) if idx.size else np.zeros(energy.shape[1]) for idx in bands], axis=1
+        )
+        dfs /= np.maximum(dfs.sum(axis=1, keepdims=True), 1e-8)
+        # differential CSI PCA (10 components, real+imag pairs)
+        diff_centered = fake_complex - fake_complex.mean(axis=0, keepdims=True)
+        _, _, vh2 = np.linalg.svd(diff_centered, full_matrices=False)
+        avail2 = min(10, vh2.shape[0])
+        diff_proj = (diff_centered @ vh2[:avail2].conj().T).astype(np.complex64)
+        if avail2 < 10:
+            diff_proj = np.pad(diff_proj, ((0, 0), (0, 10 - avail2)))
+        diff_interp = np.empty((len(stft_times), 10, 2), dtype=np.float32)
+        source_t = np.arange(diff_proj.shape[0], dtype=np.float64) / sample_rate
+        target_t = stft_times.astype(np.float64)
+        for c in range(10):
+            diff_interp[:, c, 0] = np.interp(target_t, source_t, diff_proj[:, c].real)
+            diff_interp[:, c, 1] = np.interp(target_t, source_t, diff_proj[:, c].imag)
+        # z-score
+        mean_d = diff_interp.mean(axis=(0, 2), keepdims=True)
+        std_d = diff_interp.std(axis=(0, 2), keepdims=True)
+        diff_interp = (diff_interp - mean_d) / np.maximum(std_d, 1e-6)
+        # RSSI proxy
+        rssi_proxy = np.log1p(np.abs(amp).mean(axis=1))  # [T]
+        rssi_interp = np.interp(target_t, source_t, rssi_proxy).astype(np.float32)
+        rssi_mean, rssi_std = rssi_interp.mean(), rssi_interp.std()
+        rssi = ((rssi_interp - rssi_mean) / max(rssi_std, 1e-6)).reshape(-1, 1)
+        # 4-channel RSSI (repeat)
+        rssi_list.append(np.tile(rssi, (1, 4)).astype(np.float32))
+        doppler_list.append(dfs.astype(np.float32))
+        differential_list.append(diff_interp.astype(np.float32))
+    stft_len = int(stft_times.size) if stft_times is not None else 0
     receiver_mask = np.ones(devices, dtype=bool)
-    energy = np.sqrt(np.mean(values * values, axis=(0, 2)))
-    variation = np.mean(np.abs(np.diff(values, axis=0)), axis=(0, 2)) if length > 1 else np.ones(devices)
-    snr_proxy = np.clip(energy / np.maximum(variation, 1e-6), 0.0, 20.0)
+    energy_val = np.ones(devices, dtype=np.float32)
+    snr_proxy = np.ones(devices, dtype=np.float32) * 10.0
     receiver_quality = np.stack(
-        [np.ones(devices), np.zeros(devices), np.zeros(devices), energy, snr_proxy], axis=-1
+        [np.ones(devices), np.zeros(devices), np.zeros(devices), energy_val, snr_proxy], axis=-1
     ).astype(np.float32)
+    # collate across devices
+    rssi_out = np.stack(rssi_list, axis=1)      # [T_stft, devices, 4]
+    doppler_out = np.stack(doppler_list, axis=1) # [T_stft, devices, 25]
+    diff_out = np.stack(differential_list, axis=1)  # [T_stft, devices, 10, 2]
     return {
-        "amplitude": values.astype(np.float32),
-        "time_mask": np.ones(length, dtype=bool),
-        "frame_times_ms": np.arange(length, dtype=np.float32) * float(frame_interval_ms),
+        "rssi": rssi_out,
+        "doppler": doppler_out,
+        "differential_csi": diff_out,
+        "time_mask": np.ones(stft_len, dtype=bool),
+        "frame_times_ms": (stft_times * 1000.0).astype(np.float32) if stft_times is not None else np.zeros(stft_len, dtype=np.float32),
         "receiver_mask": receiver_mask,
         "receiver_quality": receiver_quality,
     }

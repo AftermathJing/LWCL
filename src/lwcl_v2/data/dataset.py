@@ -59,15 +59,13 @@ class SignalV2Dataset(Dataset):
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         row = self.rows[index]
-        if self.feature_mode == "csi_bench_amplitude" or row.get("feature_format") == "h5":
+        if row.get("feature_format") == "h5":
             sample = load_csi_bench_amplitude(
                 self._path(row),
                 num_subcarriers=int(float(row.get("num_sub", 0) or 0)) or None,
                 num_devices=int(row.get("device_count", 1) or 1),
-                amplitude_bins=self.amplitude_bins,
-                frame_interval_ms=self.frame_interval_ms,
             )
-        else:
+        if row.get("feature_format") != "h5":
             with np.load(self._path(row), allow_pickle=False) as archive:
                 if self.requires_phase and "csi_ratio_phase" not in archive.files:
                     raise ValueError(
@@ -119,17 +117,20 @@ class SignalV2Dataset(Dataset):
 
 
 def collate_signal_v2(batch: list[dict[str, Any]], max_seq_len: int) -> dict[str, Any]:
-    amplitude_mode = "amplitude" in batch[0]
-    reference_key = "amplitude" if amplitude_mode else "rssi"
+    amplitude_mode = False  # CSI-Bench now uses rssi/doppler/differential_csi
+    has_amplitude = "amplitude" in batch[0]
+    reference_key = "rssi"
+    if has_amplitude:
+        reference_key = "amplitude"
     length = min(max(item[reference_key].shape[0] for item in batch), max_seq_len)
     batch_size = len(batch)
     receivers = batch[0][reference_key].shape[1]
-    rssi = None if amplitude_mode else torch.zeros(batch_size, length, receivers, 4)
-    doppler = None if amplitude_mode else torch.zeros(batch_size, length, receivers, batch[0]["doppler"].shape[-1])
-    differential = None if amplitude_mode else torch.zeros(
+    rssi = torch.zeros(batch_size, length, receivers, 4)
+    doppler = torch.zeros(batch_size, length, receivers, batch[0]["doppler"].shape[-1])
+    differential = torch.zeros(
         batch_size, length, receivers, batch[0]["differential_csi"].shape[-2], 2
     )
-    amplitude = torch.zeros(batch_size, length, receivers, batch[0]["amplitude"].shape[-1]) if amplitude_mode else None
+    amplitude = None
     has_phase = "csi_ratio_phase" in batch[0]
     phase = (
         torch.zeros(
@@ -144,12 +145,9 @@ def collate_signal_v2(batch: list[dict[str, Any]], max_seq_len: int) -> dict[str
     receiver_quality = torch.zeros(batch_size, receivers, batch[0]["receiver_quality"].shape[-1])
     for batch_index, item in enumerate(batch):
         valid_length = min(item[reference_key].shape[0], length)
-        if amplitude_mode:
-            amplitude[batch_index, :valid_length] = torch.from_numpy(item["amplitude"][:valid_length])
-        else:
-            rssi[batch_index, :valid_length] = torch.from_numpy(item["rssi"][:valid_length])
-            doppler[batch_index, :valid_length] = torch.from_numpy(item["doppler"][:valid_length])
-            differential[batch_index, :valid_length] = torch.from_numpy(item["differential_csi"][:valid_length])
+        rssi[batch_index, :valid_length] = torch.from_numpy(item["rssi"][:valid_length])
+        doppler[batch_index, :valid_length] = torch.from_numpy(item["doppler"][:valid_length])
+        differential[batch_index, :valid_length] = torch.from_numpy(item["differential_csi"][:valid_length])
         if phase is not None:
             phase[batch_index, :valid_length] = torch.from_numpy(
                 item["csi_ratio_phase"][:valid_length]
@@ -175,8 +173,6 @@ def collate_signal_v2(batch: list[dict[str, Any]], max_seq_len: int) -> dict[str
         "sample_ids": [item["sample_id"] for item in batch],
         "metadata": [item["metadata"] for item in batch],
     }
-    if amplitude_mode:
-        output["amplitude"] = amplitude
     if phase is not None:
         output["csi_ratio_phase"] = phase
     return output

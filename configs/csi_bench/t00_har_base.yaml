@@ -6,18 +6,19 @@ experiment:
 
 data:
   manifest: data/splits/csi_bench_har/test_id/manifest.csv
-  feature_mode: csi_bench_amplitude
+  feature_mode: current
   num_labels: 5
   num_receivers: 1
   min_valid_receivers: 1
   max_seq_len: 500
-  amplitude_bins: 64
+  doppler_bins: 25
+  differential_components: 10
   frame_interval_ms: 10.0
   quality_dim: 5
 
 model:
   feature_stems:
-    mode: csi_bench_amplitude
+    mode: family_stems
     fused_dim: 128
     dropout: 0.10
 
