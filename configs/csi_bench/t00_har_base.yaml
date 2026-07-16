@@ -1,0 +1,41 @@
+extends: ../tuning/signal_v2_tuning_base.yaml
+
+experiment:
+  id: T00_CSI_BENCH_HAR
+  description: Frozen T00 backbone adapted to CSI-Bench Human Activity Recognition
+
+data:
+  manifest: data/splits/csi_bench_har/test_id/manifest.csv
+  feature_mode: csi_bench_amplitude
+  num_labels: 5
+  num_receivers: 1
+  min_valid_receivers: 1
+  max_seq_len: 500
+  amplitude_bins: 64
+  frame_interval_ms: 10.0
+  quality_dim: 5
+
+model:
+  feature_stems:
+    mode: csi_bench_amplitude
+    fused_dim: 128
+    dropout: 0.10
+
+training:
+  device: cuda
+  precision: bf16
+  batch_size: 20
+  eval_batch_size: 64
+  num_workers: 4
+  epochs: 120
+  eval_every_steps: 200
+  save_every_steps: 200
+  use_ema: false
+  subject_balanced_sampler:
+    gestures_per_batch: 5
+    subjects_per_gesture: 2
+    samples_per_subject: 2
+    batches_per_epoch: null
+  selection:
+    macro_f1_weight: 1.0
+    worst_subject_macro_f1_weight: 0.0

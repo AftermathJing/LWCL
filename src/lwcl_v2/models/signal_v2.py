@@ -40,6 +40,7 @@ class SignalV2Classifier(nn.Module):
             differential_components=int(data.get("differential_components", 10)),
             phase_dim=int(stems.get("csi_ratio_phase_dim", 48)),
             phase_subcarriers=int(data.get("phase_subcarriers", 30)),
+            amplitude_bins=int(data.get("amplitude_bins", 64)),
             dropout=float(stems.get("dropout", 0.1)),
             mode=str(stems.get("mode", "family_stems")),
             feature_mode=self.feature_mode,
@@ -136,17 +137,21 @@ class SignalV2Classifier(nn.Module):
 
     def forward(
         self,
-        rssi: torch.Tensor,
-        doppler: torch.Tensor,
-        differential_csi: torch.Tensor,
+        rssi: torch.Tensor | None,
+        doppler: torch.Tensor | None,
+        differential_csi: torch.Tensor | None,
         time_mask: torch.Tensor,
         receiver_mask: torch.Tensor,
         receiver_quality: torch.Tensor,
         position_ids: torch.Tensor | None = None,
         frame_times_ms: torch.Tensor | None = None,
         csi_ratio_phase: torch.Tensor | None = None,
+        amplitude: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
-        batch, length = rssi.shape[:2]
+        reference = amplitude if amplitude is not None else rssi
+        if reference is None:
+            raise ValueError("SignalV2Classifier requires rssi or amplitude input")
+        batch, length = reference.shape[:2]
         if position_ids is None:
             position_ids = torch.arange(length, device=rssi.device).expand(batch, -1)
         families = self.feature_encoder(
@@ -156,6 +161,7 @@ class SignalV2Classifier(nn.Module):
             time_mask,
             receiver_mask,
             csi_ratio_phase,
+            amplitude=amplitude,
         )
         receivers = self.receiver_encoder(families["fused"], receiver_mask)
         spatial, receiver_attention = self.receiver_fusion(

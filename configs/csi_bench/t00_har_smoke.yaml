@@ -1,0 +1,19 @@
+extends: t00_har_base.yaml
+
+experiment:
+  id: T00_CSI_BENCH_HAR_SMOKE
+
+training:
+  device: cpu
+  precision: fp32
+  num_workers: 0
+  batch_size: 10
+  eval_batch_size: 10
+  max_steps: 3
+  eval_every_steps: 1
+  save_every_steps: 1
+  subject_balanced_sampler:
+    gestures_per_batch: 5
+    subjects_per_gesture: 2
+    samples_per_subject: 1
+    batches_per_epoch: 3

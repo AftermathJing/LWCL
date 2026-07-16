@@ -18,15 +18,16 @@ class SignalAugmenter:
         output = {key: value.copy() for key, value in sample.items()}
         signal_keys = tuple(
             key
-            for key in ("rssi", "doppler", "differential_csi", "csi_ratio_phase")
+            for key in ("rssi", "amplitude", "doppler", "differential_csi", "csi_ratio_phase")
             if key in output
         )
         amplitude = self.config.get("amplitude_scale", {})
         if self._enabled(amplitude, rng):
             low, high = amplitude.get("range", [0.9, 1.1])
             scale = float(rng.uniform(low, high))
-            output["rssi"] *= scale
-            output["differential_csi"] *= scale
+            for key in ("rssi", "amplitude", "differential_csi"):
+                if key in output:
+                    output[key] *= scale
 
         noise = self.config.get("gaussian_noise", {})
         if self._enabled(noise, rng):
@@ -76,8 +77,9 @@ class SignalAugmenter:
 
         frequency_mask = self.config.get("doppler_frequency_mask", {})
         if self._enabled(frequency_mask, rng):
-            maximum = min(int(frequency_mask.get("max_bins", 2)), output["doppler"].shape[-1])
+            target_key = "doppler" if "doppler" in output else "amplitude"
+            maximum = min(int(frequency_mask.get("max_bins", 2)), output[target_key].shape[-1])
             width = int(rng.integers(1, maximum + 1))
-            start = int(rng.integers(0, output["doppler"].shape[-1] - width + 1))
-            output["doppler"][..., start : start + width] = 0
+            start = int(rng.integers(0, output[target_key].shape[-1] - width + 1))
+            output[target_key][..., start : start + width] = 0
         return output

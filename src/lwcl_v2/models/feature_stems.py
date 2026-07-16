@@ -136,6 +136,27 @@ class CSIRatioPhaseStem(nn.Module):
         return _apply_masks(self.dropout(encoded), time_mask, receiver_mask)
 
 
+class CSIAmplitudeStem(nn.Module):
+    """Hardware-width invariant stem for CSI-Bench amplitude planes."""
+
+    def __init__(self, input_bins: int = 64, output_dim: int = 128, dropout: float = 0.1) -> None:
+        super().__init__()
+        self.input_bins = input_bins
+        self.encoder = nn.Sequential(
+            nn.Linear(input_bins, output_dim),
+            nn.LayerNorm(output_dim),
+            nn.SiLU(),
+            nn.Dropout(dropout),
+        )
+
+    def forward(
+        self, x: torch.Tensor, time_mask: torch.Tensor, receiver_mask: torch.Tensor
+    ) -> torch.Tensor:
+        if x.shape[-1] != self.input_bins:
+            raise ValueError(f"Expected {self.input_bins} CSI amplitude bins, got {x.shape[-1]}")
+        return _apply_masks(self.encoder(x), time_mask, receiver_mask)
+
+
 class FeatureFamilyEncoder(nn.Module):
     def __init__(
         self,
@@ -147,6 +168,7 @@ class FeatureFamilyEncoder(nn.Module):
         differential_components: int = 10,
         phase_dim: int = 48,
         phase_subcarriers: int = 30,
+        amplitude_bins: int = 64,
         dropout: float = 0.1,
         mode: str = "family_stems",
         feature_mode: str = "current",
@@ -155,12 +177,26 @@ class FeatureFamilyEncoder(nn.Module):
         super().__init__()
         self.mode = mode
         self.feature_mode = feature_mode
-        if mode not in {"family_stems", "flat_49"}:
+        if mode not in {"family_stems", "flat_49", "csi_bench_amplitude"}:
             raise ValueError(f"Unsupported feature encoder mode: {mode}")
-        if feature_mode not in {"current", "phase_dfs", "current_plus_phase"}:
+        if feature_mode not in {"current", "phase_dfs", "current_plus_phase", "csi_bench_amplitude"}:
             raise ValueError(f"Unsupported input feature mode: {feature_mode}")
+        if mode == "csi_bench_amplitude" and feature_mode != "csi_bench_amplitude":
+            raise ValueError("csi_bench_amplitude mode requires feature_mode=csi_bench_amplitude")
         if mode == "flat_49" and feature_mode != "current":
             raise ValueError("flat_49 is only compatible with feature_mode=current")
+        self.amplitude = CSIAmplitudeStem(int(amplitude_bins), fused_dim, dropout) if mode == "csi_bench_amplitude" else None
+        if mode == "csi_bench_amplitude":
+            self.use_rssi = False
+            self.use_differential = False
+            self.use_phase = False
+            self.rssi = None
+            self.doppler = None
+            self.differential = None
+            self.phase = None
+            self.fusion = None
+            self.flat_fusion = None
+            return
         self.use_rssi = feature_mode in {"current", "current_plus_phase"}
         self.use_differential = feature_mode in {"current", "current_plus_phase"}
         self.use_phase = feature_mode in {"phase_dfs", "current_plus_phase"}
@@ -205,7 +241,12 @@ class FeatureFamilyEncoder(nn.Module):
         time_mask: torch.Tensor,
         receiver_mask: torch.Tensor,
         csi_ratio_phase: torch.Tensor | None = None,
+        amplitude: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
+        if self.mode == "csi_bench_amplitude":
+            if amplitude is None or self.amplitude is None:
+                raise ValueError("csi_bench_amplitude mode requires amplitude input")
+            return {"fused": self.amplitude(amplitude, time_mask, receiver_mask)}
         if self.mode == "flat_49":
             flat = torch.cat((rssi, doppler, differential_csi.flatten(-2)), dim=-1)
             fused = _apply_masks(self.flat_fusion(flat), time_mask, receiver_mask)
