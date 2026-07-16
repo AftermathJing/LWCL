@@ -210,6 +210,7 @@ class WiCBRTrainer:
             for epoch in range(self.state["epoch"], epochs):
                 self.state["epoch"] = epoch
                 self.model.train()
+                hit_max_steps = False
                 for batch in self.train_loader:
                     batch = self._move_batch(batch)
                     with self._autocast():
@@ -251,8 +252,8 @@ class WiCBRTrainer:
                     if debug_fail_step is not None and step >= int(debug_fail_step):
                         raise RuntimeError(f"Intentional smoke-test failure at step {step}")
                     if self.max_steps is not None and step >= int(self.max_steps):
-                        self._save("last.pt")
-                        return self.state
+                        hit_max_steps = True
+                        break
                 if eval_every_epochs and (epoch + 1) % eval_every_epochs == 0:
                     self._selection_evaluate(min_delta=early_stopping_min_delta)
                     if early_stopping_patience and self.state["bad_evaluations"] >= early_stopping_patience:
@@ -261,6 +262,9 @@ class WiCBRTrainer:
                         return self.state
                 if save_every_epochs and (epoch + 1) % save_every_epochs == 0:
                     self._save("last.pt")
+                if hit_max_steps:
+                    self._save("last.pt")
+                    return self.state
                 self.scheduler.step()
                 self.state["epoch"] = epoch + 1
             self._save("last.pt")
