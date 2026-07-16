@@ -43,7 +43,15 @@ def _write_manifest(path: Path, subjects: list[str]) -> None:
         writer.writerows(rows)
 
 
-def _write_metrics(path: Path, accuracy: float, macro_f1: float, subject: str) -> None:
+def _write_metrics(
+    path: Path,
+    accuracy: float,
+    macro_f1: float,
+    subject: str,
+    *,
+    present_label_macro_f1: float | None = None,
+    present_labels: list[int] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
@@ -55,7 +63,17 @@ def _write_metrics(path: Path, accuracy: float, macro_f1: float, subject: str) -
                 "loss": 0.5,
                 "per_class_f1": [macro_f1] * 6,
                 "subjects": {
-                    subject: {"count": 10, "accuracy": accuracy, "macro_f1": macro_f1}
+                    subject: {
+                        "count": 10,
+                        "accuracy": accuracy,
+                        "macro_f1": macro_f1,
+                        "macro_f1_present_labels": (
+                            macro_f1
+                            if present_label_macro_f1 is None
+                            else present_label_macro_f1
+                        ),
+                        "present_labels": list(range(6)) if present_labels is None else present_labels,
+                    }
                 },
             }
         ),
@@ -79,6 +97,38 @@ def test_multiseed_summary_reports_mean_std_and_subject_metrics(tmp_path: Path):
     assert abs(report["test"]["macro_f1"]["mean"] - 0.85) < 1e-12
     assert report["test"]["macro_f1"]["std"] > 0
     assert report["test"]["per_subject"]["user17"]["runs"] == 2
+    assert (
+        abs(
+            report["test"]["per_subject"]["user17"]["macro_f1_present_labels"]["mean"]
+            - 0.85
+        )
+        < 1e-12
+    )
+
+
+def test_multiseed_summary_does_not_treat_absent_labels_as_subject_failure(tmp_path: Path):
+    run = tmp_path / "seed_2025"
+    (run / "train").mkdir(parents=True)
+    (run / "train" / "resolved_config.yaml").write_text(
+        yaml.safe_dump({"training": {"seed": 2025}}), encoding="utf-8"
+    )
+    _write_metrics(
+        run / "eval" / "test_metrics.json",
+        0.9,
+        0.15,
+        "user2",
+        present_label_macro_f1=0.9,
+        present_labels=[0],
+    )
+    report = summarize_runs([run])
+    user2 = report["test"]["per_subject"]["user2"]
+    assert user2["macro_f1"]["mean"] == 0.15
+    assert user2["macro_f1_present_labels"]["mean"] == 0.9
+    assert user2["present_labels"] == [0]
+    assert report["test"]["worst_observed_subject_present_labels"] == {
+        "subject": "user2",
+        "macro_f1_present_labels": 0.9,
+    }
 
 
 def test_subject_domain_audit_derives_date_and_focus_subject(tmp_path: Path):

@@ -60,3 +60,5 @@ The current leave-one-environment-out cross-domain snapshot is recorded in [docs
 The frozen multi-seed, subject-domain audit and unified ID/CL/CO/CE/CS procedures are defined in [docs/RESULT_CONSOLIDATION_PROTOCOL.md](docs/RESULT_CONSOLIDATION_PROTOCOL.md).
 
 The completed 11,370-sample user17 and domain-confounding audit is summarized in [docs/WIDAR3_SUBJECT_DOMAIN_AUDIT.md](docs/WIDAR3_SUBJECT_DOMAIN_AUDIT.md).
+
+The controlled 19-candidate Signal-v2 tuning protocol is defined in [docs/SIGNAL_V2_TUNING_PLAN.md](docs/SIGNAL_V2_TUNING_PLAN.md), and the final multi-seed, input-ablation, user17, and strict Wi-CBR results are consolidated in [docs/SIGNAL_V2_TUNING_REPORT.md](docs/SIGNAL_V2_TUNING_REPORT.md).

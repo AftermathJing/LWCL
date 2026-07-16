@@ -143,6 +143,26 @@ def _aggregate_split(records: list[dict[str, Any]]) -> dict[str, Any]:
                     if subject in record.get("subjects", {})
                 ]
             ),
+            "macro_f1_present_labels": _summary(
+                [
+                    float(
+                        record["subjects"][subject].get(
+                            "macro_f1_present_labels",
+                            record["subjects"][subject]["macro_f1"],
+                        )
+                    )
+                    for record in records
+                    if subject in record.get("subjects", {})
+                ]
+            ),
+            "present_labels": sorted(
+                {
+                    int(label)
+                    for record in records
+                    if subject in record.get("subjects", {})
+                    for label in record["subjects"][subject].get("present_labels", [])
+                }
+            ),
         }
         for subject in subjects
     }
@@ -154,6 +174,20 @@ def _aggregate_split(records: list[dict[str, Any]]) -> dict[str, Any]:
     if observed_subject_scores:
         score, subject = min(observed_subject_scores)
         aggregate["worst_observed_subject"] = {"subject": subject, "macro_f1": score}
+    observed_present_label_scores = [
+        (
+            float(metrics.get("macro_f1_present_labels", metrics["macro_f1"])),
+            subject,
+        )
+        for record in records
+        for subject, metrics in record.get("subjects", {}).items()
+    ]
+    if observed_present_label_scores:
+        score, subject = min(observed_present_label_scores)
+        aggregate["worst_observed_subject_present_labels"] = {
+            "subject": subject,
+            "macro_f1_present_labels": score,
+        }
     return aggregate
 
 
