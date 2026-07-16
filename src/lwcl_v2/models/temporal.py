@@ -102,6 +102,21 @@ class WindowAttentiveMeanPool(nn.Module):
         return self.output(torch.cat((attentive, mean), dim=-1))
 
 
+class WindowMeanPool(nn.Module):
+    def __init__(self, input_dim: int, output_dim: int) -> None:
+        super().__init__()
+        self.output = nn.Sequential(
+            nn.Linear(input_dim, output_dim),
+            nn.LayerNorm(output_dim),
+            nn.GELU(approximate="tanh"),
+        )
+
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        valid = mask.unsqueeze(-1).to(x.dtype)
+        mean = (x * valid).sum(dim=1) / valid.sum(dim=1).clamp_min(1.0)
+        return self.output(mean)
+
+
 class LocalGlobalTemporalEncoder(nn.Module):
     def __init__(
         self,
@@ -127,6 +142,7 @@ class LocalGlobalTemporalEncoder(nn.Module):
         multiscale_enabled: bool = False,
         long_window_size: int = 9,
         long_window_stride: int = 4,
+        window_pooling: str = "attentive_mean",
     ) -> None:
         super().__init__()
         self.max_seq_len = max_seq_len
@@ -141,6 +157,7 @@ class LocalGlobalTemporalEncoder(nn.Module):
         self.multiscale_enabled = multiscale_enabled
         self.long_window_size = long_window_size
         self.long_window_stride = long_window_stride
+        self.window_pooling = window_pooling
         self.projection = nn.Sequential(
             nn.Linear(input_dim, projection_dim),
             nn.LayerNorm(projection_dim),
@@ -169,7 +186,13 @@ class LocalGlobalTemporalEncoder(nn.Module):
             dropout,
             ffn_type=transformer_ffn,
         )
-        self.window_pool = WindowAttentiveMeanPool(projection_dim, output_dim)
+        if window_pooling == "attentive_mean":
+            pool_type = WindowAttentiveMeanPool
+        elif window_pooling == "mean":
+            pool_type = WindowMeanPool
+        else:
+            raise ValueError(f"Unsupported local window pooling: {window_pooling}")
+        self.window_pool = pool_type(projection_dim, output_dim)
         if multiscale_enabled:
             self.long_local_encoder = RotaryEncoder(
                 local_layers,
@@ -179,7 +202,7 @@ class LocalGlobalTemporalEncoder(nn.Module):
                 dropout,
                 ffn_type=transformer_ffn,
             )
-            self.long_window_pool = WindowAttentiveMeanPool(projection_dim, output_dim)
+            self.long_window_pool = pool_type(projection_dim, output_dim)
             self.cross_scale_attention = nn.MultiheadAttention(
                 output_dim, global_heads, dropout=dropout, batch_first=True
             )

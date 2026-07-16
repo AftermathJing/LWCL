@@ -29,6 +29,7 @@ class SignalV2Classifier(nn.Module):
         front_activation = str(activations.get("feature_fusion", "silu"))
         self.num_labels = int(data["num_labels"])
         self.max_seq_len = int(data["max_seq_len"])
+        self.feature_mode = str(data.get("feature_mode", "current"))
         fused_dim = int(stems.get("fused_dim", 128))
         self.feature_encoder = FeatureFamilyEncoder(
             rssi_dim=int(stems.get("rssi_dim", 16)),
@@ -37,8 +38,11 @@ class SignalV2Classifier(nn.Module):
             fused_dim=fused_dim,
             doppler_bins=int(data.get("doppler_bins", 25)),
             differential_components=int(data.get("differential_components", 10)),
+            phase_dim=int(stems.get("csi_ratio_phase_dim", 48)),
+            phase_subcarriers=int(data.get("phase_subcarriers", 30)),
             dropout=float(stems.get("dropout", 0.1)),
             mode=str(stems.get("mode", "family_stems")),
+            feature_mode=self.feature_mode,
             activation_name=front_activation,
         )
         self.receiver_encoder = SharedReceiverEncoder(
@@ -110,6 +114,7 @@ class SignalV2Classifier(nn.Module):
             multiscale_enabled=bool(hste.get("multiscale", {}).get("enabled", False)),
             long_window_size=int(hste.get("multiscale", {}).get("long_window_size", 9)),
             long_window_stride=int(hste.get("multiscale", {}).get("long_window_stride", 4)),
+            window_pooling=str(hste.get("window_pooling", "attentive_mean")),
         )
         pooling = str(classifier.get("pooling", "attentive_statistics"))
         if pooling == "attentive_statistics":
@@ -139,12 +144,18 @@ class SignalV2Classifier(nn.Module):
         receiver_quality: torch.Tensor,
         position_ids: torch.Tensor | None = None,
         frame_times_ms: torch.Tensor | None = None,
+        csi_ratio_phase: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         batch, length = rssi.shape[:2]
         if position_ids is None:
             position_ids = torch.arange(length, device=rssi.device).expand(batch, -1)
         families = self.feature_encoder(
-            rssi, doppler, differential_csi, time_mask, receiver_mask
+            rssi,
+            doppler,
+            differential_csi,
+            time_mask,
+            receiver_mask,
+            csi_ratio_phase,
         )
         receivers = self.receiver_encoder(families["fused"], receiver_mask)
         spatial, receiver_attention = self.receiver_fusion(

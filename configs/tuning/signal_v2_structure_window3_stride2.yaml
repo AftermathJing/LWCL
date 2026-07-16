@@ -1,0 +1,5 @@
+extends: signal_v2_stage2_base.yaml
+experiment: {id: ST01, description: Shorter HSTE local window with about 15 global tokens}
+model:
+  hste: {window_size: 3, window_stride: 2}
+

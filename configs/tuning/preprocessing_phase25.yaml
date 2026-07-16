@@ -1,0 +1,5 @@
+extends: ../preprocessing_p1.yaml
+preprocessing:
+  include_csi_ratio_phase: true
+  phase_subcarriers: 30
+

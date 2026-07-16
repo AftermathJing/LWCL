@@ -16,6 +16,11 @@ class SignalAugmenter:
 
     def __call__(self, sample: dict[str, np.ndarray], rng: np.random.Generator) -> dict[str, np.ndarray]:
         output = {key: value.copy() for key, value in sample.items()}
+        signal_keys = tuple(
+            key
+            for key in ("rssi", "doppler", "differential_csi", "csi_ratio_phase")
+            if key in output
+        )
         amplitude = self.config.get("amplitude_scale", {})
         if self._enabled(amplitude, rng):
             low, high = amplitude.get("range", [0.9, 1.1])
@@ -27,15 +32,20 @@ class SignalAugmenter:
         if self._enabled(noise, rng):
             low, high = noise.get("std_range", [0.005, 0.015])
             std = float(rng.uniform(low, high))
-            for key in ("rssi", "doppler", "differential_csi"):
+            for key in signal_keys:
                 output[key] += rng.normal(0.0, std, size=output[key].shape).astype(np.float32)
+            if "csi_ratio_phase" in output:
+                phase_norm = np.linalg.norm(output["csi_ratio_phase"], axis=-1, keepdims=True)
+                output["csi_ratio_phase"] = output["csi_ratio_phase"] / np.maximum(
+                    phase_norm, 1e-6
+                )
 
         shift_config = self.config.get("temporal_shift", {})
         if self._enabled(shift_config, rng):
             maximum = int(shift_config.get("max_frames", 2))
             shift = int(rng.integers(-maximum, maximum + 1))
             if shift:
-                for key in ("rssi", "doppler", "differential_csi", "time_mask"):
+                for key in (*signal_keys, "time_mask"):
                     output[key] = np.roll(output[key], shift, axis=0)
                     if shift > 0:
                         output[key][:shift] = 0
@@ -47,7 +57,7 @@ class SignalAugmenter:
             maximum = max(1, int(round(output["time_mask"].size * float(temporal_mask.get("max_ratio", 0.1)))))
             width = int(rng.integers(1, maximum + 1))
             start = int(rng.integers(0, output["time_mask"].size - width + 1))
-            for key in ("rssi", "doppler", "differential_csi"):
+            for key in signal_keys:
                 output[key][start : start + width] = 0
             output["time_mask"][start : start + width] = False
 
@@ -61,7 +71,7 @@ class SignalAugmenter:
             count = int(rng.integers(1, maximum + 1))
             dropped = rng.choice(valid_receivers, size=count, replace=False)
             output["receiver_mask"][dropped] = False
-            for key in ("rssi", "doppler", "differential_csi"):
+            for key in signal_keys:
                 output[key][:, dropped] = 0
 
         frequency_mask = self.config.get("doppler_frequency_mask", {})

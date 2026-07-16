@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
+
+import torch
 
 from lwcl_v2.config import load_config
 from lwcl_v2.data.dataset import build_loaders
@@ -36,7 +39,27 @@ def main() -> None:
     payload = load_checkpoint(args.checkpoint, model, ema=trainer.ema, restore_rng=False)
     trainer.state.update(payload["state"])
     loader = validation_loader if args.split == "validation" else test_loader
+    if trainer.device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(trainer.device)
+        torch.cuda.synchronize(trainer.device)
+    started = time.perf_counter()
     metrics = trainer.evaluate(loader, split=args.split, use_ema=args.weights == "ema")
+    if trainer.device.type == "cuda":
+        torch.cuda.synchronize(trainer.device)
+    elapsed = time.perf_counter() - started
+    sample_count = len(loader.dataset)
+    metrics.update(
+        {
+            "evaluation_seconds": elapsed,
+            "samples_per_second": sample_count / max(elapsed, 1e-12),
+            "mean_batch_latency_ms": 1000.0 * elapsed / max(len(loader), 1),
+            "peak_memory_bytes": (
+                int(torch.cuda.max_memory_allocated(trainer.device))
+                if trainer.device.type == "cuda"
+                else 0
+            ),
+        }
+    )
     filename = f"{args.split}_ema_metrics.json" if args.weights == "ema" else f"{args.split}_metrics.json"
     output = Path(args.output_dir) / filename
     output.write_text(json.dumps(metrics, indent=2, ensure_ascii=False), encoding="utf-8")

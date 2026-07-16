@@ -1,0 +1,9 @@
+extends: signal_v2_tuning_base.yaml
+experiment: {id: HP06, description: Higher dropout and label smoothing}
+model:
+  feature_stems: {dropout: 0.15}
+  receiver_fusion: {dropout: 0.15}
+  temporal_stem: {dropout: 0.15}
+  hste: {dropout: 0.15}
+  classifier: {dropout: 0.25, label_smoothing: 0.05}
+

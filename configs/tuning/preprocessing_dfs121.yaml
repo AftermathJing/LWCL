@@ -1,0 +1,6 @@
+extends: ../preprocessing_p1.yaml
+preprocessing:
+  stft_nfft: 1024
+  doppler_bins: 121
+  doppler_projection: interpolate
+

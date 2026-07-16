@@ -1,0 +1,4 @@
+extends: signal_v2_tuning_base.yaml
+experiment: {id: HP01, description: Lower backbone and classifier learning rates}
+training: {backbone_lr: 0.0002, classifier_lr: 0.0004}
+

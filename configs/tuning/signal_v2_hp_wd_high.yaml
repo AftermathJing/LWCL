@@ -1,0 +1,4 @@
+extends: signal_v2_tuning_base.yaml
+experiment: {id: HP04, description: Higher AdamW weight decay}
+training: {weight_decay: 0.05}
+

@@ -1,0 +1,11 @@
+extends: signal_v2_stage3_base.yaml
+experiment: {id: IN03, description: Current input with 61-bin interpolated Doppler spectrum}
+data:
+  manifest: data/splits/tuning/widar3_dfs61_subject_split.csv
+  feature_mode: current
+  doppler_bins: 61
+preprocessing:
+  stft_nfft: 512
+  doppler_bins: 61
+  doppler_projection: interpolate
+

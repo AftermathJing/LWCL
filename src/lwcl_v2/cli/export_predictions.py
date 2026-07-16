@@ -138,6 +138,7 @@ def export_predictions(
                     receiver_quality=moved["receiver_quality"],
                     position_ids=moved["position_ids"],
                     frame_times_ms=moved["frame_times_ms"],
+                    csi_ratio_phase=moved.get("csi_ratio_phase"),
                 )
             probabilities = torch.softmax(outputs["logits"].float(), dim=-1).cpu().numpy()
             arrays["labels"].extend(batch["labels"].tolist())

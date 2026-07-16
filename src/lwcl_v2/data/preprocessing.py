@@ -63,8 +63,17 @@ class QualityAwareCSIProcessor:
         self.doppler_min_hz = float(preprocessing.get("doppler_min_hz", -60.0))
         self.doppler_max_hz = float(preprocessing.get("doppler_max_hz", 60.0))
         self.doppler_bins = int(preprocessing.get("doppler_bins", 25))
+        self.doppler_projection = str(preprocessing.get("doppler_projection", "max_pool"))
+        if self.doppler_projection not in {"max_pool", "interpolate"}:
+            raise ValueError(f"Unsupported Doppler projection: {self.doppler_projection}")
         self.doppler_pca_components = int(preprocessing.get("doppler_pca_components", 3))
         self.differential_components = int(preprocessing.get("differential_pca_components", 10))
+        self.include_csi_ratio_phase = bool(
+            preprocessing.get("include_csi_ratio_phase", False)
+        )
+        self.phase_subcarriers = int(preprocessing.get("phase_subcarriers", 30))
+        if self.phase_subcarriers != 30:
+            raise ValueError("Intel 5300 CSI-ratio phase currently requires exactly 30 subcarriers")
         self.num_receivers = int(config["data"].get("num_receivers", 6))
         self.min_valid_receivers = int(config["data"].get("min_valid_receivers", 5))
         self.minimum_length = int(
@@ -110,6 +119,37 @@ class QualityAwareCSIProcessor:
             imag = signal.sosfilt(self.filter_sos, differential.imag, axis=0)
         return (real + 1j * imag).astype(np.complex64)
 
+    def _csi_ratio_phase(self, csi: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Return sample-local CSI-ratio phase as [packets,30,2] sin/cos pairs.
+
+        The stream pair follows the verified Wi-CBR preprocessing rule: choose the
+        streams with the largest and smallest amplitude mean/variance ratios.
+        This uses only the current sample and therefore introduces no dataset- or
+        target-domain statistics.
+        """
+        if csi.ndim != 2 or csi.shape[1] % self.phase_subcarriers:
+            raise ValueError(
+                f"CSI-ratio phase expects [time,streams*30], got {tuple(csi.shape)}"
+            )
+        streams = csi.shape[1] // self.phase_subcarriers
+        if streams < 2:
+            raise ValueError(f"CSI-ratio phase requires at least two streams, got {streams}")
+        reshaped = csi.reshape(csi.shape[0], streams, self.phase_subcarriers)
+        amplitude = np.abs(reshaped)
+        score = amplitude.mean(axis=(0, 2)) / np.maximum(
+            amplitude.var(axis=(0, 2)), 1e-6
+        )
+        numerator_index = int(np.argmax(score))
+        denominator_index = int(np.argmin(score))
+        if numerator_index == denominator_index:
+            raise ValueError("CSI-ratio phase stream selection collapsed to one stream")
+        ratio_phase = np.angle(
+            reshaped[:, numerator_index] * np.conj(reshaped[:, denominator_index])
+        )
+        phase_pairs = np.stack((np.sin(ratio_phase), np.cos(ratio_phase)), axis=-1)
+        pair = np.asarray([numerator_index, denominator_index], dtype=np.int16)
+        return phase_pairs.astype(np.float32), pair
+
     def _doppler(self, differential: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         principal = _complex_pca(differential, self.doppler_pca_components)
         spectra: list[np.ndarray] = []
@@ -134,12 +174,39 @@ class QualityAwareCSIProcessor:
         frequencies = frequencies[order]
         energy = energy[order]
         selected = (frequencies >= self.doppler_min_hz) & (frequencies <= self.doppler_max_hz)
+        frequencies = frequencies[selected]
         energy = energy[selected]
-        bands = np.array_split(np.arange(energy.shape[0]), self.doppler_bins)
-        aggregated = np.stack(
-            [energy[indexes].max(axis=0) if indexes.size else np.zeros(energy.shape[1]) for indexes in bands],
-            axis=1,
-        )
+        if self.doppler_projection == "max_pool":
+            bands = np.array_split(np.arange(energy.shape[0]), self.doppler_bins)
+            aggregated = np.stack(
+                [
+                    energy[indexes].max(axis=0)
+                    if indexes.size
+                    else np.zeros(energy.shape[1])
+                    for indexes in bands
+                ],
+                axis=1,
+            )
+        else:
+            target_frequencies = np.linspace(
+                self.doppler_min_hz,
+                self.doppler_max_hz,
+                self.doppler_bins,
+                dtype=np.float64,
+            )
+            aggregated = np.stack(
+                [
+                    np.interp(
+                        target_frequencies,
+                        frequencies,
+                        energy[:, frame],
+                        left=0.0,
+                        right=0.0,
+                    )
+                    for frame in range(energy.shape[1])
+                ],
+                axis=0,
+            )
         aggregated /= np.maximum(aggregated.sum(axis=1, keepdims=True), 1e-8)
         return aggregated.astype(np.float32), times.astype(np.float64)
 
@@ -161,11 +228,22 @@ class QualityAwareCSIProcessor:
         aligned_differential = _zscore(_interpolate(flat_differential, source_time, stft_time)).reshape(
             stft_time.size, self.differential_components, 2
         )
-        return {
+        result = {
             "rssi": aligned_rssi,
             "doppler": doppler,
             "differential_csi": aligned_differential,
-        }, stft_time
+        }
+        if self.include_csi_ratio_phase:
+            phase_pairs, pair = self._csi_ratio_phase(csi)
+            flat_phase = phase_pairs.reshape(phase_pairs.shape[0], -1)
+            aligned_phase = _interpolate(flat_phase, source_time, stft_time).reshape(
+                stft_time.size, self.phase_subcarriers, 2
+            )
+            norm = np.linalg.norm(aligned_phase, axis=-1, keepdims=True)
+            aligned_phase = aligned_phase / np.maximum(norm, 1e-6)
+            result["csi_ratio_phase"] = aligned_phase.astype(np.float32)
+            result["csi_ratio_pair"] = pair
+        return result, stft_time
 
     def process_group(self, receiver_paths: list[str | Path]) -> dict[str, Any]:
         if len(receiver_paths) != self.num_receivers:
@@ -218,6 +296,14 @@ class QualityAwareCSIProcessor:
                 (target_length, self.num_receivers, self.differential_components, 2), dtype=np.float32
             ),
         }
+        if self.include_csi_ratio_phase:
+            output["csi_ratio_phase"] = np.zeros(
+                (target_length, self.num_receivers, self.phase_subcarriers, 2),
+                dtype=np.float32,
+            )
+            output["csi_ratio_pair"] = np.full(
+                (self.num_receivers, 2), -1, dtype=np.int16
+            )
         for receiver_index, (feature_set, source_time) in enumerate(zip(families, time_axes, strict=True)):
             if feature_set is None or source_time is None:
                 continue
@@ -229,6 +315,16 @@ class QualityAwareCSIProcessor:
             output["differential_csi"][:, receiver_index] = _interpolate(
                 flat, source_time, target_time
             ).reshape(target_length, self.differential_components, 2)
+            if self.include_csi_ratio_phase:
+                phase = feature_set["csi_ratio_phase"].reshape(len(source_time), -1)
+                aligned_phase = _interpolate(phase, source_time, target_time).reshape(
+                    target_length, self.phase_subcarriers, 2
+                )
+                norm = np.linalg.norm(aligned_phase, axis=-1, keepdims=True)
+                output["csi_ratio_phase"][:, receiver_index] = aligned_phase / np.maximum(
+                    norm, 1e-6
+                )
+                output["csi_ratio_pair"][receiver_index] = feature_set["csi_ratio_pair"]
         output.update(
             {
                 "features": np.concatenate(

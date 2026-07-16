@@ -22,12 +22,17 @@ class SignalV2Dataset(Dataset):
         augmentation: dict[str, Any] | None = None,
         seed: int = 2025,
         min_valid_receivers: int = 5,
+        feature_mode: str = "current",
+        phase_subcarriers: int = 30,
     ) -> None:
         self.manifest_path = Path(manifest_path)
         self.root = self.manifest_path.parent
         self.max_seq_len = max_seq_len
         self.seed = seed
         self.epoch = 0
+        self.feature_mode = feature_mode
+        self.phase_subcarriers = phase_subcarriers
+        self.requires_phase = feature_mode in {"phase_dfs", "current_plus_phase"}
         with self.manifest_path.open("r", encoding="utf-8-sig", newline="") as handle:
             rows = list(csv.DictReader(handle))
         self.rows = [row for row in rows if row.get("split") == split]
@@ -50,6 +55,10 @@ class SignalV2Dataset(Dataset):
     def __getitem__(self, index: int) -> dict[str, Any]:
         row = self.rows[index]
         with np.load(self._path(row), allow_pickle=False) as archive:
+            if self.requires_phase and "csi_ratio_phase" not in archive.files:
+                raise ValueError(
+                    f"feature_mode={self.feature_mode} requires csi_ratio_phase in {self._path(row)}"
+                )
             sample = {
                 "rssi": archive["rssi"].astype(np.float32),
                 "doppler": archive["doppler"].astype(np.float32),
@@ -59,6 +68,8 @@ class SignalV2Dataset(Dataset):
                 "receiver_mask": archive["receiver_mask"].astype(bool),
                 "receiver_quality": archive["receiver_quality"].astype(np.float32),
             }
+            if self.requires_phase:
+                sample["csi_ratio_phase"] = archive["csi_ratio_phase"].astype(np.float32)
         length = sample["rssi"].shape[0]
         if length > self.max_seq_len:
             if self.augmenter is not None:
@@ -66,7 +77,16 @@ class SignalV2Dataset(Dataset):
                 start = int(rng.integers(0, length - self.max_seq_len + 1))
             else:
                 start = (length - self.max_seq_len) // 2
-            for key in ("rssi", "doppler", "differential_csi", "time_mask", "frame_times_ms"):
+            for key in (
+                "rssi",
+                "doppler",
+                "differential_csi",
+                "csi_ratio_phase",
+                "time_mask",
+                "frame_times_ms",
+            ):
+                if key not in sample:
+                    continue
                 sample[key] = sample[key][start : start + self.max_seq_len]
         if self.augmenter is not None:
             rng = np.random.default_rng(self.seed + self.epoch * len(self) + index)
@@ -91,6 +111,14 @@ def collate_signal_v2(batch: list[dict[str, Any]], max_seq_len: int) -> dict[str
     differential = torch.zeros(
         batch_size, length, receivers, batch[0]["differential_csi"].shape[-2], 2
     )
+    has_phase = "csi_ratio_phase" in batch[0]
+    phase = (
+        torch.zeros(
+            batch_size, length, receivers, batch[0]["csi_ratio_phase"].shape[-2], 2
+        )
+        if has_phase
+        else None
+    )
     time_mask = torch.zeros(batch_size, length, dtype=torch.bool)
     frame_times_ms = torch.zeros(batch_size, length, dtype=torch.float32)
     receiver_mask = torch.zeros(batch_size, receivers, dtype=torch.bool)
@@ -100,13 +128,17 @@ def collate_signal_v2(batch: list[dict[str, Any]], max_seq_len: int) -> dict[str
         rssi[batch_index, :valid_length] = torch.from_numpy(item["rssi"][:valid_length])
         doppler[batch_index, :valid_length] = torch.from_numpy(item["doppler"][:valid_length])
         differential[batch_index, :valid_length] = torch.from_numpy(item["differential_csi"][:valid_length])
+        if phase is not None:
+            phase[batch_index, :valid_length] = torch.from_numpy(
+                item["csi_ratio_phase"][:valid_length]
+            )
         time_mask[batch_index, :valid_length] = torch.from_numpy(item["time_mask"][:valid_length])
         frame_times_ms[batch_index, :valid_length] = torch.from_numpy(item["frame_times_ms"][:valid_length])
         receiver_mask[batch_index] = torch.from_numpy(item["receiver_mask"])
         receiver_quality[batch_index] = torch.from_numpy(item["receiver_quality"])
     subjects = [item["subject"] for item in batch]
     subject_mapping = {subject: index for index, subject in enumerate(sorted(set(subjects)))}
-    return {
+    output = {
         "rssi": rssi,
         "doppler": doppler,
         "differential_csi": differential,
@@ -121,6 +153,9 @@ def collate_signal_v2(batch: list[dict[str, Any]], max_seq_len: int) -> dict[str
         "sample_ids": [item["sample_id"] for item in batch],
         "metadata": [item["metadata"] for item in batch],
     }
+    if phase is not None:
+        output["csi_ratio_phase"] = phase
+    return output
 
 
 def build_loaders(config: dict[str, Any], include_test: bool = False):
@@ -132,6 +167,8 @@ def build_loaders(config: dict[str, Any], include_test: bool = False):
         "max_seq_len": int(data["max_seq_len"]),
         "seed": int(training.get("seed", 2025)),
         "min_valid_receivers": int(data.get("min_valid_receivers", 5)),
+        "feature_mode": str(data.get("feature_mode", "current")),
+        "phase_subcarriers": int(data.get("phase_subcarriers", 30)),
     }
     train_dataset = SignalV2Dataset(
         split="train", augmentation=config.get("augmentation"), **common

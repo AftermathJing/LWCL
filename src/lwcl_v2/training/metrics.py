@@ -46,9 +46,15 @@ def subject_metrics(
     output = {}
     for subject, indexes in sorted(groups.items()):
         metrics = classification_metrics(targets[indexes], predictions[indexes], num_labels)
+        present = [index for index, support in enumerate(metrics["support"]) if support > 0]
+        present_macro_f1 = float(
+            np.mean([metrics["per_class_f1"][index] for index in present])
+        )
         output[subject] = {
             "count": len(indexes),
             "accuracy": metrics["accuracy"],
             "macro_f1": metrics["macro_f1"],
+            "macro_f1_present_labels": present_macro_f1,
+            "present_labels": present,
         }
     return output

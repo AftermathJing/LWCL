@@ -134,6 +134,7 @@ class Trainer:
             receiver_quality=batch["receiver_quality"],
             position_ids=batch["position_ids"],
             frame_times_ms=batch["frame_times_ms"],
+            csi_ratio_phase=batch.get("csi_ratio_phase"),
         )
         losses = self.criterion(
             outputs["logits"], outputs["embedding"], batch["labels"], batch["subject_ids"]

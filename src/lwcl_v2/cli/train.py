@@ -6,7 +6,10 @@ import json
 import os
 import platform
 import subprocess
+import time
 from pathlib import Path
+
+import torch
 
 from lwcl_v2.config import config_hash, load_config, save_resolved_config
 from lwcl_v2.data.dataset import build_loaders
@@ -75,7 +78,27 @@ def main() -> None:
     (output_dir / "parameter_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report))
     trainer = Trainer(model, train_loader, validation_loader, config, output_dir)
+    if trainer.device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(trainer.device)
+        torch.cuda.synchronize(trainer.device)
+    started = time.perf_counter()
     state = trainer.fit(args.resume_from)
+    if trainer.device.type == "cuda":
+        torch.cuda.synchronize(trainer.device)
+    elapsed = time.perf_counter() - started
+    runtime = {
+        "train_seconds": elapsed,
+        "global_steps": int(state["global_step"]),
+        "seconds_per_step": elapsed / max(int(state["global_step"]), 1),
+        "peak_memory_bytes": (
+            int(torch.cuda.max_memory_allocated(trainer.device))
+            if trainer.device.type == "cuda"
+            else 0
+        ),
+    }
+    (output_dir / "runtime_report.json").write_text(
+        json.dumps(runtime, indent=2), encoding="utf-8"
+    )
     print(json.dumps(state))
 
 

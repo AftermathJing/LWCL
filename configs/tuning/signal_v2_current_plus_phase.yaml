@@ -1,0 +1,12 @@
+extends: signal_v2_stage3_base.yaml
+experiment: {id: IN02, description: Current feature families plus CSI-ratio phase}
+data:
+  manifest: data/splits/tuning/widar3_phase25_subject_split.csv
+  feature_mode: current_plus_phase
+  phase_subcarriers: 30
+model:
+  feature_stems: {csi_ratio_phase_dim: 48}
+preprocessing:
+  include_csi_ratio_phase: true
+  phase_subcarriers: 30
+

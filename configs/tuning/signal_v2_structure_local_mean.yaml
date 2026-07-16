@@ -1,0 +1,5 @@
+extends: signal_v2_stage2_base.yaml
+experiment: {id: ST03, description: Replace local attention plus mean pooling with mean pooling}
+model:
+  hste: {window_pooling: mean}
+

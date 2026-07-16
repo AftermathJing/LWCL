@@ -1,0 +1,4 @@
+extends: signal_v2_tuning_base.yaml
+experiment: {id: HP10, description: Higher cross-subject SupCon temperature}
+loss: {supervised_contrastive_weight: 0.10, contrastive_temperature: 0.15}
+

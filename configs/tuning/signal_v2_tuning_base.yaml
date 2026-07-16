@@ -1,0 +1,19 @@
+extends: ../signal_v2_base.yaml
+
+experiment:
+  id: T00
+  description: Signal-v2 controlled tuning baseline selected only by source validation macro-F1
+
+data:
+  feature_mode: current
+  phase_subcarriers: 30
+
+training:
+  seed: 2025
+  num_workers: 2
+  persistent_workers: false
+  use_ema: false
+  selection:
+    macro_f1_weight: 1.0
+    worst_subject_macro_f1_weight: 0.0
+

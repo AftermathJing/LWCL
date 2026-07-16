@@ -93,6 +93,49 @@ class DifferentialCSIStem(nn.Module):
         return _apply_masks(self.output(encoded), time_mask, receiver_mask)
 
 
+class CSIRatioPhaseStem(nn.Module):
+    def __init__(
+        self,
+        subcarriers: int = 30,
+        pair_dim: int = 8,
+        output_dim: int = 48,
+        dropout: float = 0.1,
+        activation_name: str = "silu",
+    ) -> None:
+        super().__init__()
+        self.subcarriers = subcarriers
+        self.pair_projection = nn.Sequential(
+            nn.Linear(2, pair_dim), activation(activation_name)
+        )
+        self.encoder = nn.Sequential(
+            nn.Conv1d(pair_dim, 32, kernel_size=3, padding=1),
+            nn.BatchNorm1d(32),
+            activation(activation_name),
+            nn.Conv1d(32, output_dim, kernel_size=3, padding=1),
+            nn.BatchNorm1d(output_dim),
+            activation(activation_name),
+            nn.AdaptiveAvgPool1d(1),
+        )
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        time_mask: torch.Tensor,
+        receiver_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        if x.shape[-2:] != (self.subcarriers, 2):
+            raise ValueError(
+                f"Expected CSI-ratio phase [...,{self.subcarriers},2], got {tuple(x.shape)}"
+            )
+        batch, length, receivers = x.shape[:3]
+        encoded = self.pair_projection(x).permute(0, 1, 2, 4, 3)
+        encoded = encoded.reshape(batch * length * receivers, -1, self.subcarriers)
+        encoded = self.encoder(encoded).squeeze(-1)
+        encoded = encoded.reshape(batch, length, receivers, -1)
+        return _apply_masks(self.dropout(encoded), time_mask, receiver_mask)
+
+
 class FeatureFamilyEncoder(nn.Module):
     def __init__(
         self,
@@ -102,20 +145,45 @@ class FeatureFamilyEncoder(nn.Module):
         fused_dim: int = 128,
         doppler_bins: int = 25,
         differential_components: int = 10,
+        phase_dim: int = 48,
+        phase_subcarriers: int = 30,
         dropout: float = 0.1,
         mode: str = "family_stems",
+        feature_mode: str = "current",
         activation_name: str = "silu",
     ) -> None:
         super().__init__()
         self.mode = mode
+        self.feature_mode = feature_mode
         if mode not in {"family_stems", "flat_49"}:
             raise ValueError(f"Unsupported feature encoder mode: {mode}")
-        self.rssi = RSSIStem(rssi_dim, dropout, activation_name)
+        if feature_mode not in {"current", "phase_dfs", "current_plus_phase"}:
+            raise ValueError(f"Unsupported input feature mode: {feature_mode}")
+        if mode == "flat_49" and feature_mode != "current":
+            raise ValueError("flat_49 is only compatible with feature_mode=current")
+        self.use_rssi = feature_mode in {"current", "current_plus_phase"}
+        self.use_differential = feature_mode in {"current", "current_plus_phase"}
+        self.use_phase = feature_mode in {"phase_dfs", "current_plus_phase"}
+        self.rssi = RSSIStem(rssi_dim, dropout, activation_name) if self.use_rssi else None
         self.doppler = DopplerStem(doppler_bins, doppler_dim, dropout, activation_name)
-        self.differential = DifferentialCSIStem(
-            differential_components, 8, differential_dim, dropout, activation_name
+        self.differential = (
+            DifferentialCSIStem(
+                differential_components, 8, differential_dim, dropout, activation_name
+            )
+            if self.use_differential
+            else None
         )
-        total = rssi_dim + doppler_dim + differential_dim
+        self.phase = (
+            CSIRatioPhaseStem(
+                phase_subcarriers, 8, phase_dim, dropout, activation_name
+            )
+            if self.use_phase
+            else None
+        )
+        total = doppler_dim
+        total += rssi_dim if self.use_rssi else 0
+        total += differential_dim if self.use_differential else 0
+        total += phase_dim if self.use_phase else 0
         self.fusion = nn.Sequential(
             nn.Linear(total, fused_dim),
             nn.LayerNorm(fused_dim),
@@ -136,19 +204,36 @@ class FeatureFamilyEncoder(nn.Module):
         differential_csi: torch.Tensor,
         time_mask: torch.Tensor,
         receiver_mask: torch.Tensor,
+        csi_ratio_phase: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         if self.mode == "flat_49":
             flat = torch.cat((rssi, doppler, differential_csi.flatten(-2)), dim=-1)
             fused = _apply_masks(self.flat_fusion(flat), time_mask, receiver_mask)
             return {"fused": fused}
-        rssi_features = self.rssi(rssi, time_mask, receiver_mask)
+        encoded_families: list[torch.Tensor] = []
+        output: dict[str, torch.Tensor] = {}
+        if self.rssi is not None:
+            rssi_features = self.rssi(rssi, time_mask, receiver_mask)
+            encoded_families.append(rssi_features)
+            output["rssi"] = rssi_features
         doppler_features = self.doppler(doppler, time_mask, receiver_mask)
-        differential_features = self.differential(differential_csi, time_mask, receiver_mask)
-        fused = self.fusion(torch.cat((rssi_features, doppler_features, differential_features), dim=-1))
+        encoded_families.append(doppler_features)
+        output["doppler"] = doppler_features
+        if self.differential is not None:
+            differential_features = self.differential(
+                differential_csi, time_mask, receiver_mask
+            )
+            encoded_families.append(differential_features)
+            output["differential_csi"] = differential_features
+        if self.phase is not None:
+            if csi_ratio_phase is None:
+                raise ValueError(
+                    f"feature_mode={self.feature_mode} requires csi_ratio_phase"
+                )
+            phase_features = self.phase(csi_ratio_phase, time_mask, receiver_mask)
+            encoded_families.append(phase_features)
+            output["csi_ratio_phase"] = phase_features
+        fused = self.fusion(torch.cat(encoded_families, dim=-1))
         fused = _apply_masks(fused, time_mask, receiver_mask)
-        return {
-            "fused": fused,
-            "rssi": rssi_features,
-            "doppler": doppler_features,
-            "differential_csi": differential_features,
-        }
+        output["fused"] = fused
+        return output

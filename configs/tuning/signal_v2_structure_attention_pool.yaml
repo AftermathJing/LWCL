@@ -1,0 +1,5 @@
+extends: signal_v2_stage2_base.yaml
+experiment: {id: ST02, description: Replace attentive statistics pooling with attention pooling}
+model:
+  classifier: {pooling: attention}
+

@@ -1,0 +1,12 @@
+extends: signal_v2_stage3_base.yaml
+experiment: {id: IN01, description: CSI-ratio phase plus 25-bin Doppler without RSSI or differential CSI}
+data:
+  manifest: data/splits/tuning/widar3_phase25_subject_split.csv
+  feature_mode: phase_dfs
+  phase_subcarriers: 30
+model:
+  feature_stems: {csi_ratio_phase_dim: 48}
+preprocessing:
+  include_csi_ratio_phase: true
+  phase_subcarriers: 30
+
