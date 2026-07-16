@@ -1,3 +1,4 @@
-extends: signal_v2_tuning_base.yaml
-experiment: {id: STAGE2_BASE, description: Updated after validation-only hyperparameter freeze}
-
+extends: signal_v2_hp_supcon_low.yaml
+experiment:
+  id: STAGE2_BASE
+  description: Freeze HP07 after 11-run validation-only hyperparameter screening
