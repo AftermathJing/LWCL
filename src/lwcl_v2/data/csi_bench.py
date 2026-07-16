@@ -114,7 +114,7 @@ def load_csi_bench_amplitude(
         diff_amplitude = np.diff(amp, axis=0)  # [T-1, F_device]
         diff_amplitude = np.vstack([diff_amplitude[:1], diff_amplitude])  # keep T
         # bandpass filter 2-60 Hz
-        sos = scipy_signal.butter(4, [2.0, 60.0], btype="bandpass", fs=sample_rate, output="sos")
+        sos = scipy_signal.butter(4, [2.0, 45.0], btype="bandpass", fs=sample_rate, output="sos")
         if diff_amplitude.shape[0] > 16:
             filtered = scipy_signal.sosfiltfilt(sos, diff_amplitude, axis=0)
         else:
