@@ -1,3 +1,4 @@
 extends: signal_v2_stage2_base.yaml
-experiment: {id: STAGE3_BASE, description: Updated after validation-only structure freeze}
-
+experiment:
+  id: STAGE3_BASE
+  description: Retain HP07 because no structure candidate exceeded it on source validation
