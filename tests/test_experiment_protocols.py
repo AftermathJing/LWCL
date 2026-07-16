@@ -8,6 +8,7 @@ import yaml
 import numpy as np
 
 from lwcl_v2.cli.analyze_subject_errors import analyze_subject
+from lwcl_v2.cli.build_wicbr_protocol_manifests import build_protocol_manifest
 from lwcl_v2.cli.audit_subject_domains import build_audit
 from lwcl_v2.cli.build_protocol_splits import build_protocol_splits
 from lwcl_v2.cli.summarize_multiseed import summarize_runs
@@ -147,3 +148,53 @@ def test_subject_error_analysis_reports_groups_calibration_and_distances(tmp_pat
     assert set(report["by_position"]) == {"1", "2"}
     assert report["calibration"]["nll"] > 0
     assert set(report["distance_to_reference_subjects"]) == {"user1", "user2"}
+
+
+def test_wicbr_manifest_adapter_duplicates_official_test_as_validation(tmp_path: Path):
+    processed_manifest = tmp_path / "processed.csv"
+    official_manifest = tmp_path / "cr1.csv"
+    feature_root = tmp_path / "features"
+    feature_root.mkdir()
+    for sample_id in ("s1", "s2"):
+        (feature_root / f"{sample_id}.npz").write_bytes(b"test")
+    with processed_manifest.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["sample_id", "feature_path", "subject", "label", "feature_format"],
+        )
+        writer.writeheader()
+        writer.writerows(
+            [
+                {
+                    "sample_id": "s1",
+                    "feature_path": str((feature_root / "s1.npz").resolve()),
+                    "subject": "u1",
+                    "label": "0",
+                    "feature_format": "npz-v2",
+                },
+                {
+                    "sample_id": "s2",
+                    "feature_path": str((feature_root / "s2.npz").resolve()),
+                    "subject": "u2",
+                    "label": "1",
+                    "feature_format": "npz-v2",
+                },
+            ]
+        )
+    with official_manifest.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["sample_id", "split", "environment", "subject", "label"],
+        )
+        writer.writeheader()
+        writer.writerows(
+            [
+                {"sample_id": "s1", "split": "train", "environment": "env1", "subject": "u1", "label": "0"},
+                {"sample_id": "s2", "split": "test", "environment": "env2", "subject": "u2", "label": "1"},
+            ]
+        )
+    output_manifest = tmp_path / "adapted" / "manifest.csv"
+    summary = build_protocol_manifest(processed_manifest, official_manifest, output_manifest)
+    rows = list(csv.DictReader(output_manifest.open("r", encoding="utf-8-sig", newline="")))
+    assert summary["counts"] == {"train": 1, "validation": 1, "test": 1}
+    assert sorted(row["split"] for row in rows) == ["test", "train", "validation"]
