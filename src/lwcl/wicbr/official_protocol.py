@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from pathlib import Path
 from typing import Iterable
 
@@ -63,6 +64,17 @@ def _with_official_fields(rows: Iterable[dict[str, str]]) -> list[dict[str, str]
     return output
 
 
+def _rebase_path_fields(row: dict[str, str], source_root: Path, destination_root: Path) -> dict[str, str]:
+    updated = dict(row)
+    for key, value in row.items():
+        if not key.endswith("_path") or not value:
+            continue
+        path = Path(value)
+        absolute = path if path.is_absolute() else (source_root / path).resolve()
+        updated[key] = Path(os.path.relpath(absolute, destination_root)).as_posix()
+    return updated
+
+
 def build_widar3_official_wicbr_manifests(
     input_manifest: str | Path,
     output_dir: str | Path,
@@ -70,6 +82,7 @@ def build_widar3_official_wicbr_manifests(
     input_manifest = Path(input_manifest).resolve()
     output_dir = Path(output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    source_root = input_manifest.parent
 
     rows = _with_official_fields(_read_rows(input_manifest))
     available_pairs = sorted({(row["environment"], row["subject"]) for row in rows})
@@ -84,13 +97,14 @@ def build_widar3_official_wicbr_manifests(
 
     def write_manifest(name: str, manifest_rows: list[dict[str, str]]) -> None:
         path = output_dir / f"{name}.csv"
-        fieldnames = list(manifest_rows[0].keys())
+        rebased_rows = [_rebase_path_fields(row, source_root, output_dir) for row in manifest_rows]
+        fieldnames = list(rebased_rows[0].keys())
         with path.open("w", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(manifest_rows)
+            writer.writerows(rebased_rows)
         counts: dict[str, int] = {}
-        for row in manifest_rows:
+        for row in rebased_rows:
             split = row["split"]
             counts[split] = counts.get(split, 0) + 1
         summary = {
