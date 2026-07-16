@@ -21,8 +21,14 @@ HAR_PROTOCOLS = (
 
 def resolve_csi_bench_path(dataset_root: str | Path, task_dir: str | Path, file_path: str) -> Path:
     root = Path(dataset_root).resolve()
-    task = Path(task_dir).resolve()
     original = Path(file_path)
+    # CSI-Bench metadata stores paths relative to the task metadata
+    # directory, using ../../sub_Human_h5/... form. Resolve against
+    # <task_dir>/metadata, then try broader fallbacks.
+    task = Path(task_dir).resolve()
+    metadata_candidate = (task / "metadata" / original).resolve()
+    if metadata_candidate.exists():
+        return metadata_candidate
     candidates = [
         original if original.is_absolute() else None,
         task / original,
