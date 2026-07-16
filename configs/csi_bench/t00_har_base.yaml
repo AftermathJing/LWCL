@@ -27,7 +27,8 @@ training:
   precision: bf16
   batch_size: 20
   eval_batch_size: 64
-  num_workers: 4
+  num_workers: 8
+  persistent_workers: true
   epochs: 120
   eval_every_steps: 200
   save_every_steps: 200
