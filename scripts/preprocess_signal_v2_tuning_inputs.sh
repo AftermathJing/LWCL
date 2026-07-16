@@ -20,7 +20,8 @@ run_variant() {
   local split="$ROOT/data/splits/tuning/widar3_${name}_subject_split.csv"
   local audit="$processed/contract_audit.json"
 
-  "$CONDA" run --no-capture-output -n "$ENV_NAME" \
+  env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
+    "$CONDA" run --no-capture-output -n "$ENV_NAME" \
     python -m lwcl_v2.cli.preprocess_widar3 \
     --config "$preprocess_config" \
     --input-root "$INPUT_ROOT" \
@@ -28,13 +29,15 @@ run_variant() {
     --output-root "$processed" \
     --workers "$WORKERS"
 
-  "$CONDA" run --no-capture-output -n "$ENV_NAME" \
+  env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
+    "$CONDA" run --no-capture-output -n "$ENV_NAME" \
     python -m lwcl_v2.cli.build_subject_split \
     --processed-manifest "$processed/manifest.csv" \
     --reference-manifest "$FROZEN_SPLIT" \
     --output "$split"
 
-  "$CONDA" run --no-capture-output -n "$ENV_NAME" \
+  env OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
+    "$CONDA" run --no-capture-output -n "$ENV_NAME" \
     python -m lwcl_v2.cli.audit_feature_contract \
     --manifest "$split" \
     --config "$train_config" \
