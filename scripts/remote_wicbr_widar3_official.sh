@@ -9,6 +9,7 @@ SOURCE_MANIFEST="${SOURCE_MANIFEST:-/home/wj/LWCL/data/splits/widar3_wicbr_subje
 OFFICIAL_SPLIT_DIR="${OFFICIAL_SPLIT_DIR:-$ROOT_DIR/tmp/widar3_wicbr_official}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$ROOT_DIR/outputs/widar3_wicbr_official}"
 PROTOCOLS="${PROTOCOLS:-cr1 cr2 cr3 indom cl co}"
+export PYTHONPATH="${PYTHONPATH:-$ROOT_DIR/src}"
 
 if [[ "$GPU_ID" == "auto" ]]; then
   GPU_ID="$($CONDA_BIN run --no-capture-output -n LWCL python "$ROOT_DIR/scripts/select_free_gpu.py")"
