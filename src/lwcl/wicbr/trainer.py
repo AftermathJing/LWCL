@@ -28,13 +28,16 @@ class WiCBRTrainer:
         self,
         model: nn.Module,
         train_loader: torch.utils.data.DataLoader,
-        validation_loader: torch.utils.data.DataLoader,
+        validation_loader: torch.utils.data.DataLoader | None,
         config: dict[str, Any],
         output_dir: str | Path,
+        *,
+        selection_loader: torch.utils.data.DataLoader | None = None,
     ) -> None:
         self.model = model
         self.train_loader = train_loader
         self.validation_loader = validation_loader
+        self.selection_loader = selection_loader or validation_loader
         self.config = config
         self.data_config = config["data"]
         self.training_config = config["training"]
@@ -61,7 +64,17 @@ class WiCBRTrainer:
         self.proxy_loss = ProxyContrastiveLoss(float(self.training_config.get("temperature", 0.1)))
         self.beta_1 = float(self.training_config.get("beta_1", 0.1))
         self.logger = JsonlLogger(self.output_dir / "metrics.jsonl")
-        self.state = {"epoch": 0, "global_step": 0, "best_macro_f1": -1.0, "bad_evaluations": 0}
+        self.monitor_metric = str(self.training_config.get("monitor_metric", "macro_f1"))
+        self.selection_split = str(self.training_config.get("selection_split", "validation"))
+        self.state = {
+            "epoch": 0,
+            "global_step": 0,
+            "best_macro_f1": -1.0,
+            "best_metric": -1.0,
+            "best_metric_name": self.monitor_metric,
+            "selection_split": self.selection_split,
+            "bad_evaluations": 0,
+        }
         self.max_steps = self.training_config.get("max_steps")
 
     def _autocast(self):
@@ -125,6 +138,8 @@ class WiCBRTrainer:
         split: str = "validation",
     ) -> dict[str, Any]:
         loader = loader or self.validation_loader
+        if loader is None:
+            raise ValueError(f"No loader available for split={split}")
         self.model.eval()
         losses: list[float] = []
         ce_losses: list[float] = []
@@ -155,13 +170,38 @@ class WiCBRTrainer:
         self.logger.log({"event": "evaluation", **metrics})
         return metrics
 
+    def _record_best(self, metrics: dict[str, Any], min_delta: float) -> bool:
+        monitor_value = float(metrics[self.monitor_metric])
+        if float(metrics.get("macro_f1", -1.0)) > float(self.state.get("best_macro_f1", -1.0)):
+            self.state["best_macro_f1"] = float(metrics["macro_f1"])
+        if monitor_value > float(self.state.get("best_metric", -1.0)) + min_delta:
+            self.state["best_metric"] = monitor_value
+            self.state["bad_evaluations"] = 0
+            self._save("best.pt")
+            return True
+        self.state["bad_evaluations"] = self.state.get("bad_evaluations", 0) + 1
+        return False
+
+    def _selection_evaluate(self, *, min_delta: float) -> bool:
+        if self.selection_loader is None:
+            raise ValueError(f"selection_split={self.selection_split!r} requested but no selection loader was provided")
+        metrics = self.evaluate(self.selection_loader, split=self.selection_split)
+        self.model.train()
+        return self._record_best(metrics, min_delta)
+
     def fit(self, resume_from: str | Path | None = None) -> dict[str, Any]:
         if resume_from is not None:
             self.resume(resume_from)
         epochs = int(self.training_config.get("epochs", 30))
         log_every = int(self.training_config.get("log_every_steps", 10))
-        eval_every = int(self.training_config.get("eval_every_steps", 100))
-        save_every = int(self.training_config.get("save_every_steps", 100))
+        eval_every_raw = self.training_config.get("eval_every_steps", 100)
+        eval_every = int(eval_every_raw) if eval_every_raw not in (None, 0, "0") else 0
+        eval_every_epochs_raw = self.training_config.get("eval_every_epochs")
+        eval_every_epochs = int(eval_every_epochs_raw) if eval_every_epochs_raw not in (None, 0, "0") else 0
+        save_every_raw = self.training_config.get("save_every_steps", 100)
+        save_every = int(save_every_raw) if save_every_raw not in (None, 0, "0") else 0
+        save_every_epochs_raw = self.training_config.get("save_every_epochs")
+        save_every_epochs = int(save_every_epochs_raw) if save_every_epochs_raw not in (None, 0, "0") else 0
         gradient_clip = float(self.training_config.get("gradient_clip_norm", 1.0))
         early_stopping_patience = int(self.training_config.get("early_stopping_patience", 0))
         early_stopping_min_delta = float(self.training_config.get("early_stopping_min_delta", 0.0))
@@ -198,20 +238,13 @@ class WiCBRTrainer:
                                 "learning_rates": [group["lr"] for group in self.optimizer.param_groups],
                             }
                         )
-                    if step % eval_every == 0:
-                        metrics = self.evaluate()
-                        self.model.train()
-                        if metrics["macro_f1"] > self.state["best_macro_f1"] + early_stopping_min_delta:
-                            self.state["best_macro_f1"] = metrics["macro_f1"]
-                            self.state["bad_evaluations"] = 0
-                            self._save("best.pt")
-                        else:
-                            self.state["bad_evaluations"] = self.state.get("bad_evaluations", 0) + 1
+                    if eval_every and step % eval_every == 0:
+                        self._selection_evaluate(min_delta=early_stopping_min_delta)
                         if early_stopping_patience and self.state["bad_evaluations"] >= early_stopping_patience:
                             self.logger.log({"event": "early_stopping", **self.state})
                             self._save("last.pt")
                             return self.state
-                    if step % save_every == 0:
+                    if save_every and step % save_every == 0:
                         self._save(f"step_{step:08d}.pt")
                         self._save("last.pt")
                     debug_fail_step = self.training_config.get("debug_fail_after_step")
@@ -220,6 +253,14 @@ class WiCBRTrainer:
                     if self.max_steps is not None and step >= int(self.max_steps):
                         self._save("last.pt")
                         return self.state
+                if eval_every_epochs and (epoch + 1) % eval_every_epochs == 0:
+                    self._selection_evaluate(min_delta=early_stopping_min_delta)
+                    if early_stopping_patience and self.state["bad_evaluations"] >= early_stopping_patience:
+                        self.logger.log({"event": "early_stopping", **self.state})
+                        self._save("last.pt")
+                        return self.state
+                if save_every_epochs and (epoch + 1) % save_every_epochs == 0:
+                    self._save("last.pt")
                 self.scheduler.step()
                 self.state["epoch"] = epoch + 1
             self._save("last.pt")

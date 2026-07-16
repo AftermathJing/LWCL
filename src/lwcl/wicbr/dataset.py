@@ -58,6 +58,17 @@ class WiCBRDataset(Dataset):
         }
 
 
+def manifest_split_counts(manifest_path: str | Path) -> dict[str, int]:
+    manifest_path = Path(manifest_path)
+    with manifest_path.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    counts: dict[str, int] = {}
+    for row in rows:
+        split = row.get("split", "")
+        counts[split] = counts.get(split, 0) + 1
+    return counts
+
+
 def build_wicbr_dataloader(
     dataset: WiCBRDataset,
     *,

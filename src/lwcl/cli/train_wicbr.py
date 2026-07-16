@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 from lwcl.config import load_config, save_resolved_config
-from lwcl.wicbr.dataset import WiCBRDataset, build_wicbr_dataloader
+from lwcl.wicbr.dataset import WiCBRDataset, build_wicbr_dataloader, manifest_split_counts
 from lwcl.wicbr.model import WiCBRNet
 from lwcl.wicbr.trainer import WiCBRTrainer, seed_everything
 
@@ -28,46 +28,29 @@ def _git_value(*args: str) -> str | None:
         return None
 
 
-def build_loaders(config: dict[str, object], include_test: bool = False):
+def build_loaders(config: dict[str, object], splits: tuple[str, ...] = ("train", "validation")):
     data = config["data"]
     training = config["training"]
     manifest = Path(data["manifest"])
     phase_field = str(data.get("phase_field", "phase_path"))
     dfs_field = str(data.get("dfs_field", "dfs_path"))
     image_size = int(data.get("image_size", 224))
-    train_dataset = WiCBRDataset(manifest, "train", image_size=image_size, phase_field=phase_field, dfs_field=dfs_field)
-    validation_dataset = WiCBRDataset(
-        manifest,
-        "validation",
-        image_size=image_size,
-        phase_field=phase_field,
-        dfs_field=dfs_field,
-    )
-    train_loader = build_wicbr_dataloader(
-        train_dataset,
-        batch_size=int(training.get("batch_size", 10)),
-        num_workers=int(training.get("num_workers", 4)),
-        balanced_sampling=bool(training.get("balanced_sampling", False)),
-        shuffle=True,
-    )
-    validation_loader = build_wicbr_dataloader(
-        validation_dataset,
-        batch_size=int(training.get("eval_batch_size", training.get("batch_size", 10))),
-        num_workers=int(training.get("num_workers", 4)),
-        balanced_sampling=False,
-        shuffle=False,
-    )
-    if not include_test:
-        return train_loader, validation_loader
-    test_dataset = WiCBRDataset(manifest, "test", image_size=image_size, phase_field=phase_field, dfs_field=dfs_field)
-    test_loader = build_wicbr_dataloader(
-        test_dataset,
-        batch_size=int(training.get("eval_batch_size", training.get("batch_size", 10))),
-        num_workers=int(training.get("num_workers", 4)),
-        balanced_sampling=False,
-        shuffle=False,
-    )
-    return train_loader, validation_loader, test_loader
+    counts = manifest_split_counts(manifest)
+    loaders: dict[str, object] = {}
+
+    for split in splits:
+        if split not in counts:
+            raise ValueError(f"Requested split={split!r} is missing from {manifest}")
+        dataset = WiCBRDataset(manifest, split, image_size=image_size, phase_field=phase_field, dfs_field=dfs_field)
+        is_train = split == "train"
+        loaders[split] = build_wicbr_dataloader(
+            dataset,
+            batch_size=int(training.get("batch_size", 10)) if is_train else int(training.get("eval_batch_size", training.get("batch_size", 10))),
+            num_workers=int(training.get("num_workers", 4)),
+            balanced_sampling=bool(training.get("balanced_sampling", False)) if is_train else False,
+            shuffle=is_train,
+        )
+    return loaders
 
 
 def main() -> None:
@@ -99,14 +82,19 @@ def main() -> None:
     (output_dir / "run_info.json").write_text(json.dumps(run_info, ensure_ascii=False, indent=2), encoding="utf-8")
 
     seed_everything(int(config["training"].get("seed", 42)))
-    train_loader, validation_loader = build_loaders(config, include_test=False)
+    selection_split = str(config["training"].get("selection_split", "validation"))
+    requested_splits = tuple(dict.fromkeys(["train", selection_split]))
+    loaders = build_loaders(config, splits=requested_splits)
+    train_loader = loaders["train"]
+    validation_loader = loaders.get("validation")
+    selection_loader = loaders.get(selection_split)
     model = WiCBRNet(
         num_labels=int(config["data"]["num_labels"]),
         pretrained=bool(config["model"].get("pretrained", True)),
         group_num=int(config["model"].get("group_num", 4)),
         gate_threshold=float(config["model"].get("gate_threshold", 0.5)),
     )
-    trainer = WiCBRTrainer(model, train_loader, validation_loader, config, output_dir)
+    trainer = WiCBRTrainer(model, train_loader, validation_loader, config, output_dir, selection_loader=selection_loader)
     trainer.fit(resume_from=args.resume_from)
 
 

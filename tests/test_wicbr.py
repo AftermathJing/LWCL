@@ -101,3 +101,48 @@ def test_wicbr_dataset_and_trainer_smoke(tmp_path: Path) -> None:
     state = trainer.fit()
     assert state["global_step"] == 1
     assert (tmp_path / "outputs" / "checkpoints" / "last.pt").exists()
+
+
+def test_wicbr_official_epoch_test_selection_smoke(tmp_path: Path) -> None:
+    manifest = _build_manifest(tmp_path)
+    train_dataset = WiCBRDataset(manifest, "train", image_size=64)
+    test_dataset = WiCBRDataset(manifest, "test", image_size=64)
+
+    train_loader = build_wicbr_dataloader(train_dataset, batch_size=2, num_workers=0, balanced_sampling=False, shuffle=True)
+    test_loader = build_wicbr_dataloader(test_dataset, batch_size=2, num_workers=0, balanced_sampling=False, shuffle=False)
+
+    seed_everything(888)
+    model = WiCBRNet(num_labels=2, pretrained=False)
+    config = {
+        "data": {"manifest": str(manifest), "num_labels": 2},
+        "training": {
+            "seed": 888,
+            "device": "cpu",
+            "precision": "fp32",
+            "epochs": 1,
+            "batch_size": 2,
+            "eval_batch_size": 2,
+            "num_workers": 0,
+            "learning_rate": 1e-4,
+            "weight_decay": 0.0,
+            "temperature": 0.1,
+            "beta_1": 0.1,
+            "step_lr": {"step_size": 3, "gamma": 0.5},
+            "log_every_steps": 1,
+            "eval_every_steps": None,
+            "eval_every_epochs": 1,
+            "save_every_steps": None,
+            "save_every_epochs": 1,
+            "early_stopping_patience": 0,
+            "gradient_clip_norm": 1.0,
+            "selection_split": "test",
+            "monitor_metric": "accuracy",
+            "max_steps": 1,
+        },
+    }
+    trainer = WiCBRTrainer(model, train_loader, None, config, tmp_path / "outputs_official", selection_loader=test_loader)
+    state = trainer.fit()
+    assert state["best_metric_name"] == "accuracy"
+    assert state["selection_split"] == "test"
+    assert (tmp_path / "outputs_official" / "checkpoints" / "last.pt").exists()
+    assert (tmp_path / "outputs_official" / "checkpoints" / "best.pt").exists()

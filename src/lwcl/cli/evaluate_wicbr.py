@@ -25,7 +25,10 @@ def main() -> None:
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    train_loader, validation_loader, test_loader = build_loaders(config, include_test=True)
+    loaders = build_loaders(config, splits=("train", args.split))
+    train_loader = loaders["train"]
+    validation_loader = loaders.get("validation")
+    split_loader = loaders[args.split]
     model = WiCBRNet(
         num_labels=int(config["data"]["num_labels"]),
         pretrained=bool(config["model"].get("pretrained", True)),
@@ -34,8 +37,7 @@ def main() -> None:
     )
     trainer = WiCBRTrainer(model, train_loader, validation_loader, config, output_dir)
     trainer.resume(args.checkpoint)
-    loader = validation_loader if args.split == "validation" else test_loader
-    metrics = trainer.evaluate(loader, split=args.split)
+    metrics = trainer.evaluate(split_loader, split=args.split)
     (output_dir / f"{args.split}_metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(metrics, ensure_ascii=False, indent=2))
 
