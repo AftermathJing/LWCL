@@ -13,6 +13,7 @@ import os
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+import csv
 
 import numpy as np
 
@@ -42,9 +43,9 @@ def main() -> None:
     parser.add_argument("--manifest", required=True, help="Path to HAR manifest CSV")
     parser.add_argument("--output-root", required=True, help="Directory to write NPZ files")
     parser.add_argument("--workers", type=int, default=8, help="Number of parallel workers")
+    parser.add_argument("--processed-manifest", default=None, help="Write a new manifest CSV pointing to the generated NPZ files")
     args = parser.parse_args()
 
-    import csv
     manifest_path = Path(args.manifest).resolve()
     output_root = Path(args.output_root).resolve()
     with manifest_path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -60,6 +61,7 @@ def main() -> None:
     success = 0
     failed = 0
     completed = 0
+    results: dict[str, str] = {}  # sample_id -> rel_npz_path
 
     with ProcessPoolExecutor(max_workers=args.workers) as executor:
         futures = {executor.submit(_process_one, row): row for row in rows}
@@ -74,6 +76,25 @@ def main() -> None:
             if completed % 1000 == 0:
                 print(f"  progress: {completed}/{len(rows)}  ok={success}  fail={failed}", flush=True)
 
+    if args.processed_manifest:
+        pm = Path(args.processed_manifest)
+        pm.parent.mkdir(parents=True, exist_ok=True)
+        with open(pm, "w", encoding="utf-8", newline="") as out:
+            new_rows = []
+            for row in rows:
+                sid = str(row["sample_id"])
+                if sid in results:
+                    nr = dict(row)
+                    nr["feature_path"] = str(output_root / results[sid])
+                    nr["feature_format"] = "npz"
+                    new_rows.append(nr)
+            if new_rows:
+                fieldnames = list(new_rows[0].keys())
+                writer = csv.DictWriter(out, fieldnames=fieldnames, extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(new_rows)
+        print(f"Wrote processed manifest ({len(new_rows)} rows) to {pm}", flush=True)
+
     print(f"Done: {success} ok, {failed} failed out of {len(rows)}", flush=True)
     if failed:
         sys.exit(1)
@@ -81,3 +102,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+            if ok:
+                results[sample_id] = f"{sample_id}.npz"
