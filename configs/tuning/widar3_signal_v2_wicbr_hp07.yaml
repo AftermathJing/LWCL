@@ -1,0 +1,14 @@
+extends: signal_v2_hp_supcon_low.yaml
+
+experiment:
+  id: widar3_signal_v2_wicbr_hp07
+  description: Frozen HP07 evaluated on the Wi-CBR official cross-room protocol
+
+data:
+  manifest: data/splits/widar3_signal_v2_wicbr_protocol/cr3/manifest.csv
+
+training:
+  seed: 2025
+  num_workers: 2
+  persistent_workers: false
+  early_stopping_patience: 0
