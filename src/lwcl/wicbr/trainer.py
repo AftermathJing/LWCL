@@ -46,17 +46,8 @@ class WiCBRTrainer:
         device_name = self.training_config.get("device", "cuda" if torch.cuda.is_available() else "cpu")
         self.device = torch.device(device_name)
         self.model.to(self.device)
-        self.optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=float(self.training_config.get("learning_rate", 1e-4)),
-            weight_decay=float(self.training_config.get("weight_decay", 0.0)),
-        )
-        scheduler_cfg = self.training_config.get("step_lr", {})
-        self.scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optimizer,
-            step_size=int(scheduler_cfg.get("step_size", 3)),
-            gamma=float(scheduler_cfg.get("gamma", 0.5)),
-        )
+        self.optimizer = self._build_optimizer()
+        self.scheduler = self._build_scheduler()
         precision = self.training_config.get("precision", "fp32")
         self.autocast_dtype = {"bf16": torch.bfloat16, "fp16": torch.float16}.get(precision)
         self.scaler = torch.amp.GradScaler("cuda", enabled=precision == "fp16" and self.device.type == "cuda")
@@ -76,6 +67,63 @@ class WiCBRTrainer:
             "bad_evaluations": 0,
         }
         self.max_steps = self.training_config.get("max_steps")
+
+    def _build_optimizer(self) -> torch.optim.Optimizer:
+        weight_decay = float(self.training_config.get("weight_decay", 0.0))
+        default_lr = float(self.training_config.get("learning_rate", 1e-4))
+        backbone_lr = self.training_config.get("backbone_learning_rate")
+        classifier_lr = self.training_config.get("classifier_learning_rate")
+        optimizer_name = str(self.training_config.get("optimizer", "adam")).lower()
+
+        param_groups: list[dict[str, Any]]
+        if backbone_lr is not None or classifier_lr is not None:
+            backbone_params: list[torch.nn.Parameter] = []
+            classifier_params: list[torch.nn.Parameter] = []
+            classifier_ids = {id(param) for param in self.model.fc.parameters()}
+            for param in self.model.parameters():
+                if not param.requires_grad:
+                    continue
+                if id(param) in classifier_ids:
+                    classifier_params.append(param)
+                else:
+                    backbone_params.append(param)
+            param_groups = []
+            if backbone_params:
+                param_groups.append(
+                    {
+                        "params": backbone_params,
+                        "lr": float(backbone_lr if backbone_lr is not None else default_lr),
+                        "weight_decay": weight_decay,
+                    }
+                )
+            if classifier_params:
+                param_groups.append(
+                    {
+                        "params": classifier_params,
+                        "lr": float(classifier_lr if classifier_lr is not None else default_lr),
+                        "weight_decay": weight_decay,
+                    }
+                )
+        else:
+            param_groups = [{"params": [param for param in self.model.parameters() if param.requires_grad], "lr": default_lr, "weight_decay": weight_decay}]
+
+        if optimizer_name == "adamw":
+            return torch.optim.AdamW(param_groups)
+        return torch.optim.Adam(param_groups)
+
+    def _build_scheduler(self) -> torch.optim.lr_scheduler.LRScheduler:
+        scheduler_name = str(self.training_config.get("scheduler", "step")).lower()
+        if scheduler_name in {"none", "disabled"}:
+            return torch.optim.lr_scheduler.ConstantLR(self.optimizer, factor=1.0, total_iters=1)
+        if scheduler_name == "cosine":
+            epochs = int(self.training_config.get("epochs", 30))
+            return torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=max(epochs, 1))
+        scheduler_cfg = self.training_config.get("step_lr", {})
+        return torch.optim.lr_scheduler.StepLR(
+            self.optimizer,
+            step_size=int(scheduler_cfg.get("step_size", 3)),
+            gamma=float(scheduler_cfg.get("gamma", 0.5)),
+        )
 
     def _autocast(self):
         if self.autocast_dtype is None or self.device.type != "cuda":
@@ -205,6 +253,7 @@ class WiCBRTrainer:
         gradient_clip = float(self.training_config.get("gradient_clip_norm", 1.0))
         early_stopping_patience = int(self.training_config.get("early_stopping_patience", 0))
         early_stopping_min_delta = float(self.training_config.get("early_stopping_min_delta", 0.0))
+        save_last_on_eval = bool(self.training_config.get("save_last_on_eval", False))
         self.optimizer.zero_grad(set_to_none=True)
         try:
             for epoch in range(self.state["epoch"], epochs):
@@ -241,9 +290,12 @@ class WiCBRTrainer:
                         )
                     if eval_every and step % eval_every == 0:
                         self._selection_evaluate(min_delta=early_stopping_min_delta)
+                        if save_last_on_eval:
+                            self._save("last.pt")
                         if early_stopping_patience and self.state["bad_evaluations"] >= early_stopping_patience:
                             self.logger.log({"event": "early_stopping", **self.state})
-                            self._save("last.pt")
+                            if not save_last_on_eval:
+                                self._save("last.pt")
                             return self.state
                     if save_every and step % save_every == 0:
                         self._save(f"step_{step:08d}.pt")
@@ -256,9 +308,12 @@ class WiCBRTrainer:
                         break
                 if eval_every_epochs and (epoch + 1) % eval_every_epochs == 0:
                     self._selection_evaluate(min_delta=early_stopping_min_delta)
+                    if save_last_on_eval:
+                        self._save("last.pt")
                     if early_stopping_patience and self.state["bad_evaluations"] >= early_stopping_patience:
                         self.logger.log({"event": "early_stopping", **self.state})
-                        self._save("last.pt")
+                        if not save_last_on_eval:
+                            self._save("last.pt")
                         return self.state
                 if save_every_epochs and (epoch + 1) % save_every_epochs == 0:
                     self._save("last.pt")

@@ -1,0 +1,37 @@
+data:
+  manifest: data/splits/csi_bench_har_wicbr/test_id/manifest.csv
+  num_labels: 5
+  image_size: 224
+  phase_field: phase_path
+  dfs_field: dfs_path
+
+model:
+  pretrained: true
+  group_num: 4
+  gate_threshold: 0.5
+
+training:
+  seed: 2025
+  device: cuda
+  precision: bf16
+  optimizer: adamw
+  backbone_learning_rate: 3.0e-4
+  classifier_learning_rate: 9.0e-4
+  weight_decay: 0.01
+  scheduler: cosine
+  epochs: 80
+  batch_size: 64
+  eval_batch_size: 128
+  num_workers: 8
+  balanced_sampling: false
+  log_every_steps: 20
+  eval_every_steps: 86
+  eval_every_epochs: 0
+  save_every_steps: 0
+  save_every_epochs: 0
+  save_last_on_eval: true
+  gradient_clip_norm: 1.0
+  early_stopping_patience: 12
+  early_stopping_min_delta: 0.0005
+  selection_split: validation
+  monitor_metric: macro_f1

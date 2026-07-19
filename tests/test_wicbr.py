@@ -146,3 +146,67 @@ def test_wicbr_official_epoch_test_selection_smoke(tmp_path: Path) -> None:
     assert state["selection_split"] == "test"
     assert (tmp_path / "outputs_official" / "checkpoints" / "last.pt").exists()
     assert (tmp_path / "outputs_official" / "checkpoints" / "best.pt").exists()
+
+
+def test_wicbr_step_early_stopping_saves_best_and_last(tmp_path: Path) -> None:
+    manifest = _build_manifest(tmp_path)
+    train_dataset = WiCBRDataset(manifest, "train", image_size=64)
+    validation_dataset = WiCBRDataset(manifest, "validation", image_size=64)
+    train_loader = build_wicbr_dataloader(
+        train_dataset, batch_size=1, num_workers=0, balanced_sampling=False, shuffle=False
+    )
+    validation_loader = build_wicbr_dataloader(
+        validation_dataset, batch_size=2, num_workers=0, balanced_sampling=False, shuffle=False
+    )
+
+    seed_everything(42)
+    model = WiCBRNet(num_labels=2, pretrained=False)
+    config = {
+        "data": {"manifest": str(manifest), "num_labels": 2},
+        "training": {
+            "seed": 42,
+            "device": "cpu",
+            "precision": "fp32",
+            "epochs": 3,
+            "batch_size": 1,
+            "eval_batch_size": 2,
+            "num_workers": 0,
+            "learning_rate": 1e-4,
+            "weight_decay": 0.0,
+            "temperature": 0.1,
+            "beta_1": 0.1,
+            "scheduler": "none",
+            "log_every_steps": 1,
+            "eval_every_steps": 1,
+            "eval_every_epochs": 0,
+            "save_every_steps": 0,
+            "save_every_epochs": 0,
+            "save_last_on_eval": True,
+            "early_stopping_patience": 1,
+            "early_stopping_min_delta": 2.0,
+            "gradient_clip_norm": 1.0,
+            "selection_split": "validation",
+            "monitor_metric": "macro_f1",
+        },
+    }
+    trainer = WiCBRTrainer(model, train_loader, validation_loader, config, tmp_path / "outputs_earlystop")
+    trainer.state["best_metric"] = -2.0
+    state = trainer.fit()
+
+    assert state["global_step"] == 2
+    assert state["bad_evaluations"] == 1
+    best_checkpoint = tmp_path / "outputs_earlystop" / "checkpoints" / "best.pt"
+    last_checkpoint = tmp_path / "outputs_earlystop" / "checkpoints" / "last.pt"
+    assert best_checkpoint.exists()
+    assert last_checkpoint.exists()
+
+    config["training"]["early_stopping_patience"] = 0
+    config["training"]["max_steps"] = 3
+    resumed_model = WiCBRNet(num_labels=2, pretrained=False)
+    resumed_trainer = WiCBRTrainer(
+        resumed_model, train_loader, validation_loader, config, tmp_path / "outputs_resumed"
+    )
+    resumed_state = resumed_trainer.fit(resume_from=last_checkpoint)
+
+    assert resumed_state["global_step"] == 3
+    assert (tmp_path / "outputs_resumed" / "checkpoints" / "last.pt").exists()
