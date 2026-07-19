@@ -1,0 +1,50 @@
+{
+  "run": {
+    "date": "2026-07-19",
+    "git_commit": "b24324a4b890215b30fb16a0f68da8a3cfd56060",
+    "official_wicbr_commit": "4f118d2e7105bf486462cbdcac4931b1f8244bc5",
+    "manifest_sha256": "ab77192ae868c6d0c3cded7085e49aaac41245d4983fb6473076ec54d39cfea5",
+    "selection_split": "validation",
+    "monitor_metric": "macro_f1",
+    "eval_every_steps": 86,
+    "early_stopping_patience": 12,
+    "early_stopping_min_delta": 0.0005,
+    "stopped_step": 4988,
+    "stopped_epoch_zero_based": 14,
+    "best_step": 3956,
+    "best_validation_macro_f1": 0.9452311911877127,
+    "fatal_error_count": 0
+  },
+  "metrics": {
+    "test_id": {
+      "count": 4602,
+      "accuracy": 0.9678400695349848,
+      "weighted_f1": 0.9679507609191135,
+      "macro_f1": 0.9547686945521965
+    },
+    "test_cross_device": {
+      "count": 9631,
+      "accuracy": 0.4636071020662444,
+      "weighted_f1": 0.45954336352154995,
+      "macro_f1": 0.3997621139712729
+    },
+    "test_cross_env": {
+      "count": 6650,
+      "accuracy": 0.4496240601503759,
+      "weighted_f1": 0.4451571090853249,
+      "macro_f1": 0.3390700614020468
+    },
+    "test_cross_user": {
+      "count": 12109,
+      "accuracy": 0.6049219588735651,
+      "weighted_f1": 0.5805563875812455,
+      "macro_f1": 0.4821594430013472
+    },
+    "test_cross_user_env": {
+      "count": 18759,
+      "accuracy": 0.5498693960232421,
+      "weighted_f1": 0.5343538078879806,
+      "macro_f1": 0.4332057192939902
+    }
+  }
+}
