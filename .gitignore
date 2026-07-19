@@ -16,6 +16,7 @@ __pycache__/
 *credentials*.json
 *secret*.json
 secrets/
+/data/
 /data/raw/
 /data/processed/
 /data/splits/
@@ -34,3 +35,6 @@ logs/
 nohup.out
 slurm-*.out
 tmp/
+
+# XRF55 dataset
+/data/raw/xrf55/
