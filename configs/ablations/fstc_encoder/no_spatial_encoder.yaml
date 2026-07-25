@@ -1,0 +1,8 @@
+extends: ../../tuning/signal_v2_tuning_base.yaml
+
+experiment:
+  id: FSTC_ENCODER_NO_SPATIAL
+  description: Remove learned receiver/spatial encoding and use a receiver-mask-aware mean
+
+ablation:
+  variant: no_spatial_encoder

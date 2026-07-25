@@ -1,0 +1,8 @@
+extends: ../../tuning/signal_v2_tuning_base.yaml
+
+experiment:
+  id: FSTC_ENCODER_FULL_CONTROL
+  description: Isolated ablation control using the unchanged original FSTC implementation
+
+ablation:
+  variant: full_control

@@ -1,0 +1,8 @@
+extends: ../../tuning/signal_v2_tuning_base.yaml
+
+experiment:
+  id: FSTC_ENCODER_NO_FEATURE
+  description: Remove feature-family encoding and retain only a raw 49D dimension-matching projection
+
+ablation:
+  variant: no_feature_encoder

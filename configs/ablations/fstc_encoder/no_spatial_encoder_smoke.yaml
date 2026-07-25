@@ -1,0 +1,14 @@
+extends: no_spatial_encoder.yaml
+
+experiment:
+  id: FSTC_ENCODER_NO_SPATIAL_SMOKE
+
+training:
+  max_steps: 4
+  num_workers: 0
+  eval_every_steps: 2
+  save_every_steps: 2
+  log_every_steps: 1
+  early_stopping_patience: 0
+  subject_balanced_sampler:
+    batches_per_epoch: 4
