@@ -1,0 +1,16 @@
+extends: no_temporal_encoder.yaml
+
+experiment:
+  id: FSTC_ENCODER_NO_TEMPORAL_TESTACC
+  description: Temporal-encoder ablation with official target-test accuracy checkpoint selection
+
+training:
+  seed: 2025
+  num_workers: 2
+  persistent_workers: false
+  early_stopping_patience: 0
+  selection_split: test
+  selection:
+    metric: accuracy
+    macro_f1_weight: 0.0
+    worst_subject_macro_f1_weight: 0.0

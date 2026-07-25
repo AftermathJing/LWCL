@@ -1,0 +1,16 @@
+extends: full_control.yaml
+
+experiment:
+  id: FSTC_ENCODER_FULL_CONTROL_TESTACC
+  description: Full FSTC control with official target-test accuracy checkpoint selection
+
+training:
+  seed: 2025
+  num_workers: 2
+  persistent_workers: false
+  early_stopping_patience: 0
+  selection_split: test
+  selection:
+    metric: accuracy
+    macro_f1_weight: 0.0
+    worst_subject_macro_f1_weight: 0.0

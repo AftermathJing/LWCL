@@ -1,0 +1,14 @@
+extends: full_control_testacc.yaml
+
+experiment:
+  id: FSTC_ENCODER_FULL_CONTROL_TESTACC_SMOKE
+  description: Short save-eval-resume smoke for target-test accuracy selection
+
+training:
+  epochs: 2
+  max_steps: 2
+  log_every_steps: 1
+  eval_every_steps: 1
+  save_every_steps: 1
+  subject_balanced_sampler:
+    batches_per_epoch: 2

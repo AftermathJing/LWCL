@@ -10,6 +10,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from lwcl_v2.ablations.fstc_encoder import build_fstc_encoder_model
+from lwcl_v2.ablations.test_selection_trainer import TestAccuracySelectionTrainer
 from lwcl_v2.config import load_config
 from lwcl_v2.data.dataset import SignalV2Dataset, collate_signal_v2
 from lwcl_v2.training.checkpoint import load_checkpoint
@@ -60,7 +61,12 @@ def main() -> None:
         collate_fn=partial(collate_signal_v2, max_seq_len=int(data["max_seq_len"])),
     )
     model = build_fstc_encoder_model(config)
-    trainer = Trainer(model, loader, loader, config, args.output_dir)
+    trainer_class = (
+        TestAccuracySelectionTrainer
+        if str(training.get("selection_split", "validation")) == "test"
+        else Trainer
+    )
+    trainer = trainer_class(model, loader, loader, config, args.output_dir)
     payload = load_checkpoint(args.checkpoint, model, ema=trainer.ema, restore_rng=False)
     trainer.state.update(payload["state"])
     if trainer.device.type == "cuda":
