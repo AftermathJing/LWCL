@@ -7,6 +7,7 @@ ENV_NAME="${LWCL_V2_ENV:-LWCL}"
 RUNS_ROOT="${RUNS_ROOT:-$ROOT/outputs/widar3_fstc_encoder_ablations_20260725}"
 SEEDS_TEXT="${SEEDS:-2025 2026 2027 2028 2029}"
 NUM_WORKERS="${NUM_WORKERS:-2}"
+LD_PRELOAD_PATH="${LD_PRELOAD_PATH:-/home/wj/miniconda3/envs/LWCL/lib/libstdc++.so.6}"
 VARIANTS_TEXT="${VARIANTS:-full_control no_feature_encoder no_spatial_encoder no_temporal_encoder}"
 GPUS_TEXT="${GPUS:-0 1 2 3}"
 
@@ -43,6 +44,7 @@ run_variant() {
         return 1
       fi
       env CUDA_VISIBLE_DEVICES="$gpu" \
+        LD_PRELOAD="$LD_PRELOAD_PATH" \
         OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
         "$CONDA" run --no-capture-output -n "$ENV_NAME" \
         python -m lwcl_v2.ablations.train \
@@ -55,6 +57,7 @@ run_variant() {
     fi
     for split in validation test; do
       env CUDA_VISIBLE_DEVICES="$gpu" \
+        LD_PRELOAD="$LD_PRELOAD_PATH" \
         OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
         "$CONDA" run --no-capture-output -n "$ENV_NAME" \
         python -m lwcl_v2.ablations.evaluate \
